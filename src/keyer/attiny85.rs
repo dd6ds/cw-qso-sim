@@ -45,15 +45,17 @@ pub struct Attiny85Keyer {
     pub dah_mem:  bool,
     pub last_el:  Option<bool>,
     pub el_end:   Instant,
+    switch_paddle: bool,
 }
 
 impl Attiny85Keyer {
     /// Open the MIDI port.  `port_hint` is either "" (auto-detect) or a
     /// substring to match against available port names.
     pub fn new(
-        mode:      crate::config::PaddleMode,
-        dot_dur:   Duration,
-        port_hint: &str,
+        mode:          crate::config::PaddleMode,
+        dot_dur:       Duration,
+        port_hint:     &str,
+        switch_paddle: bool,
     ) -> Result<Self> {
         let midi_in = MidiInput::new("cw-qso-sim")
             .map_err(|e| anyhow!("MIDI init failed: {e}"))?;
@@ -142,6 +144,7 @@ impl Attiny85Keyer {
             dah_mem: false,
             last_el: None,
             el_end: std::time::Instant::now(),
+            switch_paddle,
         })
     }
 }
@@ -162,7 +165,7 @@ pub fn check_adapter(port_hint: &str, timeout: Duration) -> Result<bool> {
     use crate::config::{PaddleMode};
 
     // Use IambicA with a dummy dot duration — we only care about press/release
-    let mut keyer = Attiny85Keyer::new(PaddleMode::IambicA, Duration::from_millis(60), port_hint)?;
+    let mut keyer = Attiny85Keyer::new(PaddleMode::IambicA, Duration::from_millis(60), port_hint, false)?;
 
     let port_name = {
         // Just for display — re-query the port name
@@ -250,9 +253,15 @@ impl KeyerInput for Attiny85Keyer {
     fn name(&self) -> &str { "ATtiny85 MIDI" }
 
     fn poll(&mut self) -> PaddleEvent {
-        let (dit_pressed, dah_pressed) = {
+        let (raw_dit, raw_dah) = {
             let st = self.state.lock().unwrap();
             (st.dit, st.dah)
+        };
+        // Honour switch_paddle: swap DIT and DAH if requested
+        let (dit_pressed, dah_pressed) = if self.switch_paddle {
+            (raw_dah, raw_dit)
+        } else {
+            (raw_dit, raw_dah)
         };
 
         let now = std::time::Instant::now();

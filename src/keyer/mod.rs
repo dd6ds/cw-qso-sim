@@ -151,7 +151,8 @@ pub fn create_keyer(
         AdapterType::Attiny85 => {
             #[cfg(feature = "keyer-attiny85")]
             {
-                Ok((Box::new(attiny85::Attiny85Keyer::new(mode, dot_dur, port)?), false))
+                if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
+                Ok((Box::new(attiny85::Attiny85Keyer::new(mode, dot_dur, port, switch_paddle)?), false))
             }
             #[cfg(not(feature = "keyer-attiny85"))]
             {

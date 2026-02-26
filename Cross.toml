@@ -11,9 +11,19 @@ image = "ghcr.io/cross-rs/i686-unknown-linux-gnu:main"
 
 [target.aarch64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+pre-build = [
+    "dpkg --add-architecture arm64",
+    "apt-get update -qq",
+    "apt-get install -y --no-install-recommends libasound2-dev:arm64 libudev-dev:arm64",
+]
 
 [target.armv7-unknown-linux-gnueabihf]
 image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main"
+pre-build = [
+    "dpkg --add-architecture armhf",
+    "apt-get update -qq",
+    "apt-get install -y --no-install-recommends libasound2-dev:armhf libudev-dev:armhf",
+]
 
 # ── Windows (MinGW) ────────────────────────────────────────────────────
 [target.x86_64-pc-windows-gnu]
@@ -22,6 +32,10 @@ image = "ghcr.io/cross-rs/x86_64-pc-windows-gnu:main"
 [target.i686-pc-windows-gnu]
 image = "ghcr.io/cross-rs/i686-pc-windows-gnu:main"
 
-# ── macOS (requires osxcross, native build preferred) ──────────────────
+# ── macOS ──────────────────────────────────────────────────────────────
+# macOS targets are NOT built via cross — they use cargo-zigbuild instead
+# (see build-cross.sh).  No Docker image or SDK is needed.
+# To set up: cargo install cargo-zigbuild
+#            rustup target add x86_64-apple-darwin aarch64-apple-darwin
 # [target.x86_64-apple-darwin]
 # [target.aarch64-apple-darwin]
