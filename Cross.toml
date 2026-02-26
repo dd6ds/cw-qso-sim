@@ -1,0 +1,27 @@
+# Cross.toml — targets for `cross` build tool
+[build.env]
+passthrough = ["RUST_LOG"]
+
+# ── Linux ──────────────────────────────────────────────────────────────
+[target.x86_64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:main"
+
+[target.i686-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/i686-unknown-linux-gnu:main"
+
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
+
+[target.armv7-unknown-linux-gnueabihf]
+image = "ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main"
+
+# ── Windows (MinGW) ────────────────────────────────────────────────────
+[target.x86_64-pc-windows-gnu]
+image = "ghcr.io/cross-rs/x86_64-pc-windows-gnu:main"
+
+[target.i686-pc-windows-gnu]
+image = "ghcr.io/cross-rs/i686-pc-windows-gnu:main"
+
+# ── macOS (requires osxcross, native build preferred) ──────────────────
+# [target.x86_64-apple-darwin]
+# [target.aarch64-apple-darwin]

@@ -1,0 +1,45 @@
+# cw-qso-sim — example configuration file
+# Copy to ~/.config/cw-qso-sim/config.toml and adjust to taste.
+
+[general]
+# Your callsign — shown in the TUI header and sent during QSOs
+mycall     = "DD6DS"
+# who starts the QSO: "sim" (simulator sends CQ) | "me" (you send CQ)
+who_starts = "sim"
+# UI language: "en" | "de" | "fr" | "it"
+language   = "en"
+
+[morse]
+# Simulator TX speed (WPM) — how fast the simulated station sends
+sim_wpm    = 25
+# Your keying / decoder speed (WPM) — char-gap timing used to decode your paddle
+user_wpm   = 18
+# Farnsworth effective WPM (0 = disabled).
+# When set, characters are sent at user_wpm speed but gaps are stretched to
+# farnsworth_wpm, giving you more time to read between characters.
+farnsworth_wpm = 0
+# Sidetone frequency in Hz
+tone_hz    = 620
+# Audio volume 0.0 – 1.0
+volume     = 0.7
+# true = play sidetone while you key
+sidetone   = true
+
+[keyer]
+# Adapter type: "auto" | "vband" | "attiny85" | "keyboard"
+# "auto" detects hardware and falls back to keyboard text-input if none found.
+# On Windows builds without hardware support, "auto" always uses keyboard.
+adapter    = "auto"
+# Paddle mode: "iambic_a" | "iambic_b" | "straight"
+mode       = "iambic_a"
+# Serial port — not used for VBand HID; kept for future serial adapters
+# port     = "/dev/ttyUSB0"
+
+[qso]
+# QSO style: "ragchew" | "contest" | "dx_pileup" | "random"
+style        = "ragchew"
+# Simulated operator reaction delay range (milliseconds)
+min_delay_ms = 800
+max_delay_ms = 2500
+# Probability of a simulated typo (0.0 – 1.0, e.g. 0.05 = 5%)
+typo_rate    = 0.05

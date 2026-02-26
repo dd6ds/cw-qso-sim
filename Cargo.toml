@@ -1,0 +1,62 @@
+[package]
+name = "cw-qso-sim"
+version = "0.1.0"
+edition = "2021"
+description = "Morse Code QSO Simulator — cross-platform, multi-adapter, multi-language"
+authors = ["DD6DS"]
+
+[[bin]]
+name = "cw-qso-sim"
+path = "src/main.rs"
+
+[features]
+default     = ["audio-cpal", "keyer-vband", "keyer-attiny85", "tui"]
+audio-cpal  = ["dep:cpal"]
+keyer-vband = ["dep:hidapi"]
+# keyer-vband-winusb: WinUSB/libwdi fallback for Windows.
+# Enable when the VBand adapter has a WinUSB driver installed (e.g. via Zadig).
+# Requires libusb (vendored via cmake); included automatically in Windows builds.
+keyer-vband-winusb = ["keyer-vband", "dep:rusb"]
+keyer-attiny85 = ["dep:midir"]
+tui         = ["dep:ratatui", "dep:crossterm"]
+
+[dependencies]
+# Audio
+cpal       = { version = "0.15", optional = true }
+
+# TUI
+ratatui    = { version = "0.28", optional = true }
+crossterm  = { version = "0.27", optional = true }
+
+# CLI + config
+clap       = { version = "4", features = ["derive"] }
+serde      = { version = "1",  features = ["derive"] }
+toml       = "0.8"
+
+# Utilities
+rand       = { version = "0.8", features = ["small_rng"] }
+anyhow     = "1"
+log        = "0.4"
+env_logger = "0.11"
+
+# WinUSB fallback for VBand on Windows (libwdi/Zadig-installed driver)
+# Vendored libusb is statically linked — no runtime DLL required.
+rusb = { version = "0.9", features = ["vendored"], optional = true }
+
+# ATtiny85 Digispark MIDI adapter
+midir      = { version = "0.10", optional = true }
+
+# VBand USB HID adapter (VID 413d:PID 2107)
+# Linux: linux-static-hidraw avoids libudev build dependency.
+# Runtime permission: sudo chmod a+rw /dev/hidraw*  or install udev rule.
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["linux-static-hidraw"], optional = true }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+hidapi = { version = "2.6", optional = true }
+
+[profile.release]
+opt-level     = 3
+strip         = true
+lto           = true
+codegen-units = 1
