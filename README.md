@@ -1,4 +1,4 @@
-A simple CW QSO Simulator/Tainer
+A simple TUI CW QSO Simulator/Tainer
 
 
 Supported Adapter: 
