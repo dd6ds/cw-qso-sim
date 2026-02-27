@@ -4,6 +4,8 @@ pub mod keyboard;
 pub mod vband;
 #[cfg(feature = "keyer-attiny85")]
 pub mod attiny85;
+#[cfg(feature = "keyer-nano")]
+pub mod nano;
 
 use crate::morse::decoder::PaddleEvent;
 use anyhow::Result;
@@ -30,6 +32,11 @@ pub fn list_ports() -> Vec<String> {
     {
         let mut m = attiny85::list_midi_ports();
         out.append(&mut m);
+    }
+    #[cfg(feature = "keyer-nano")]
+    {
+        let mut s = nano::list_nano_ports();
+        out.append(&mut s);
     }
     if out.is_empty() {
         out.push("No keyer adapters found.".into());
@@ -62,7 +69,7 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
     use crate::config::AdapterType;
 
     // Compile-time shortcut: no hardware features → skip scanning entirely.
-    #[cfg(not(any(feature = "keyer-vband", feature = "keyer-attiny85")))]
+    #[cfg(not(any(feature = "keyer-vband", feature = "keyer-attiny85", feature = "keyer-nano")))]
     {
         log::info!("[autodetect] No hardware keyer features compiled in — using keyboard text-input mode");
         return AdapterType::Keyboard;
@@ -114,6 +121,18 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
                 log::info!("[autodetect] ATtiny85 MIDI found");
                 return AdapterType::Attiny85;
             }
+        }
+    }
+
+    #[cfg(feature = "keyer-nano")]
+    {
+        if let Some(port) = nano::autodetect_nano_port() {
+            log::info!("[autodetect] Arduino Nano found on {port}");
+            return AdapterType::ArduinoNano;
+        }
+        if let Some(port) = nano::autodetect_uno_port() {
+            log::info!("[autodetect] Arduino Uno found on {port}");
+            return AdapterType::ArduinoUno;
         }
     }
 
@@ -194,6 +213,40 @@ pub fn create_keyer(
             #[cfg(not(feature = "keyer-attiny85"))]
             {
                 log::warn!("adapter = \"attiny85\" in config but this build has no ATtiny85 support — falling back to keyboard text-input");
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
+            }
+        }
+        AdapterType::ArduinoNano => {
+            #[cfg(feature = "keyer-nano")]
+            {
+                if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
+                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, port, switch_paddle)?), false, None))
+            }
+            #[cfg(not(feature = "keyer-nano"))]
+            {
+                log::warn!("adapter = \"arduino_nano\" but this build has no Nano support — falling back to keyboard text-input");
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
+            }
+        }
+        AdapterType::ArduinoUno => {
+            #[cfg(feature = "keyer-nano")]
+            {
+                if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
+                // Uno uses the same serial-MIDI protocol as the Nano.
+                // Pass port as-is; NanoKeyer::new will autodetect via UNO VID/PIDs
+                // if port is empty (autodetect_uno_port already ran above in Auto path,
+                // but when --adapter arduino-uno is explicit we re-resolve here).
+                let resolved_port = if port.is_empty() {
+                    nano::autodetect_uno_port()
+                        .unwrap_or_default()
+                } else {
+                    port.to_string()
+                };
+                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, &resolved_port, switch_paddle)?), false, None))
+            }
+            #[cfg(not(feature = "keyer-nano"))]
+            {
+                log::warn!("adapter = \"arduino_uno\" but this build has no Nano/Uno support — falling back to keyboard text-input");
                 Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
             }
         }

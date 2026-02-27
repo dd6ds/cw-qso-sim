@@ -1,6 +1,3 @@
-# WIP - the Project is new and have a lot of bugs !!!
-
-
 # cw-qso-sim
 
 A terminal-based Morse code QSO simulator and trainer — cross-platform, multi-adapter, multi-language.
@@ -47,16 +44,6 @@ cw-qso-sim
 cw-qso-sim --adapter keyboard
 ```
 
-
-## Example:  Run DARC Education Contest Train Mode
-
-
-```
-./cw-qso-sim-x86_64-unknown-linux-gnu --mycall YOUCALLSIGN --adapter keyboard --style darc-cw-contest --sim-wpm 20 --user-wpm 15 --tone 550
-```
-
-
-
 ---
 
 ## CLI reference
@@ -76,7 +63,7 @@ OPTIONS:
     --port <PORT>            Serial / MIDI port (ATtiny85 port name/substring)
     --midi-port <PORT>       MIDI port override for ATtiny85 (takes precedence over --port)
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
-    --style <STYLE>          ragchew | contest | dx_pileup | random | darc-cw-contes
+    --style <STYLE>          ragchew | contest | dx_pileup | random
     --lang <LANG>            en | de | fr | it
     --config <PATH>          Custom config file path
     --write-config           Write the built-in default config.toml and exit
@@ -174,22 +161,10 @@ ATtiny85 GND         →  Paddle common ground
 #### Wiring
 
 ```
-UNO Pin 2 (D2)  →  LEFT  paddle (DIT)
-UNO Pin 3 (D3)  →  RIGHT paddle (DAH)
-UNO GND         →  Paddle common ground
+ATtiny85 Pin 2 (D2)  →  LEFT  paddle (DIT)
+ATtiny85 Pin 3 (D3)  →  RIGHT paddle (DAH)
+ATtiny85 GND         →  Paddle common ground
 ```
-
-### Arduino Nano (all platforms)
-
-#### Wiring
-
-```
-Nano Pin 2 (D2)  →  LEFT  paddle (DIT)
-Nano Pin 3 (D3)  →  RIGHT paddle (DAH)
-Nnano GND        →  Paddle common ground
-```
-
-
 
 
 #### udev rule (Linux / Debian / Mint)
@@ -247,8 +222,11 @@ cargo build
 # Release build
 cargo build --release
 
+# Windows (cross-compile from Linux)
+./build-cross.sh
+
 # All targets
-./build-all.sh
+./cross/build-all.sh
 ```
 
 ### Cargo features

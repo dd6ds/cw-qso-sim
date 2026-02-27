@@ -44,7 +44,7 @@ pub struct Cli {
     #[arg(long)]
     pub style: Option<QsoStyle>,
 
-    /// Keyer adapter: vband | keyboard | none
+    /// Keyer adapter: auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard
     #[arg(long)]
     pub adapter: Option<AdapterType>,
 
@@ -106,6 +106,12 @@ pub enum AdapterType {
     /// ATtiny85 MIDI paddle
     #[cfg_attr(not(feature = "keyer-attiny85"), value(skip))]
     Attiny85,
+    /// Arduino Nano serial-MIDI paddle (31250 baud; autodetects CH340/FT232/ATmega16U2)
+    #[cfg_attr(not(feature = "keyer-nano"), value(skip))]
+    ArduinoNano,
+    /// Arduino Uno serial-MIDI paddle (31250 baud; autodetects ATmega16U2/CH340)
+    #[cfg_attr(not(feature = "keyer-nano"), value(skip))]
+    ArduinoUno,
     /// Keyboard text-input mode (type callsigns, Space=word, Enter=over)
     Keyboard,
     /// Hidden — text-mode input (legacy alias for keyboard)
