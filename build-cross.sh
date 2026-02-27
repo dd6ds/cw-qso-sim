@@ -35,6 +35,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+# Ensure ~/.local/bin (cargo-zigbuild's zig wrapper) is on PATH
+export PATH="$HOME/.local/bin:$PATH"
+
 BINARY="cw-qso-sim"
 OUT_DIR="dist"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -200,9 +203,29 @@ build_mac() {
         fi
         echo "  SDK       →  $SDKROOT"
 
+        # cargo-zigbuild's generated zigcc wrapper does not inject -isysroot
+        # or -F for the linker phase.  We wrap it: intercept the link step and
+        # add the framework + lib paths from our SDK so zig can resolve
+        # CoreAudio, CoreMIDI, IOKit, etc.
+        local zig_cache_dir
+        zig_cache_dir=$(dirname "$(ls "$HOME"/.cache/cargo-zigbuild/*/zigcc-${target}-*.sh 2>/dev/null | sort -V | tail -1)")
+        local wrapper_dir="${SCRIPT_DIR}/target-${target}-linker"
+        mkdir -p "$wrapper_dir"
+        cat > "${wrapper_dir}/zig-link-wrapper.sh" << WRAPPER
+#!/bin/sh
+# Inject macOS SDK framework + lib search paths into every zig cc link call.
+exec "${zig_cache_dir}/zigcc-${target}-"*.sh \\
+    -F"${SDKROOT}/System/Library/Frameworks" \\
+    -L"${SDKROOT}/usr/lib" \\
+    "\$@"
+WRAPPER
+        chmod +x "${wrapper_dir}/zig-link-wrapper.sh"
+
+        local linker_var="CARGO_TARGET_$(echo "$target" | tr '[:lower:]-' '[:upper:]_')_LINKER"
         SDKROOT="$SDKROOT" \
         COREAUDIO_SDK_PATH="$SDKROOT" \
-        BINDGEN_EXTRA_CLANG_ARGS="-isysroot $SDKROOT" \
+        BINDGEN_EXTRA_CLANG_ARGS="-isysroot $SDKROOT -F$SDKROOT/System/Library/Frameworks" \
+        env "${linker_var}=${wrapper_dir}/zig-link-wrapper.sh" \
         cargo zigbuild --release \
             --target      "$target" \
             --target-dir  "$tgt_dir" \

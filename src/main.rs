@@ -125,7 +125,7 @@ fn main() -> Result<()> {
     // ── Keyer ─────────────────────────────────────────────────────────────────
     // For ATtiny85: --midi-port takes precedence over --port
     let keyer_port = if !cfg.midi_port.is_empty() { &cfg.midi_port } else { &cfg.port };
-    let (keyer, is_keyboard) = keyer::create_keyer(cfg.adapter, keyer_port, cfg.paddle_mode, user_timing.dot, cfg.switch_paddle)?;
+    let (keyer, is_keyboard, windows_paddle) = keyer::create_keyer(cfg.adapter, keyer_port, cfg.paddle_mode, user_timing.dot, cfg.switch_paddle)?;
 
     // ── QSO engine ────────────────────────────────────────────────────────────
     let mut engine = QsoEngine::new(&cfg);
@@ -224,7 +224,25 @@ fn main() -> Result<()> {
             use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
             while event::poll(Duration::from_millis(0))? {
                 if let Event::Key(k) = event::read()? {
-                    if k.kind == KeyEventKind::Release { continue; }
+                    if k.kind == KeyEventKind::Release {
+                        // Let modifier-key releases through for the VBand Windows
+                        // shim (needs both press and release of LCtrl/RCtrl).
+                        // All other release events are ignored.
+                        #[cfg(target_os = "windows")]
+                        {
+                            use crossterm::event::KeyCode::Modifier;
+                            use crossterm::event::ModifierKeyCode::{LeftControl, RightControl};
+                            let is_paddle_modifier = matches!(
+                                k.code,
+                                Modifier(LeftControl) | Modifier(RightControl)
+                            );
+                            if !is_paddle_modifier || windows_paddle.is_none() {
+                                continue;
+                            }
+                        }
+                        #[cfg(not(target_os = "windows"))]
+                        continue;
+                    }
 
                     // Escape or Ctrl+C always quit
                     if k.code == KeyCode::Esc
@@ -261,9 +279,36 @@ fn main() -> Result<()> {
                             _ => {}
                         }
                     } else {
-                        // ── Hardware keyer mode — only quit key needed ─────
+                        // ── Hardware keyer mode ────────────────────────────
                         if k.code == KeyCode::Char('q') || k.code == KeyCode::Char('Q') {
                             break 'main;
+                        }
+                        // VBand Windows shim: LCtrl=DIT, RCtrl=DAH.
+                        // We need both Press AND Release events here, so we
+                        // do NOT skip Release at the top for modifier keys.
+                        if let Some(ref arc) = windows_paddle {
+                            use crossterm::event::KeyCode::Modifier;
+                            use crossterm::event::ModifierKeyCode::{LeftControl, RightControl};
+                            use std::sync::atomic::Ordering;
+                            let (bit, is_dit) = match k.code {
+                                Modifier(LeftControl)  => (0x01u8, true),
+                                Modifier(RightControl) => (0x10u8, false),
+                                _ => (0, false),
+                            };
+                            if bit != 0 {
+                                let prev = arc.load(Ordering::Relaxed);
+                                let next = if k.kind == KeyEventKind::Press {
+                                    prev | bit
+                                } else {
+                                    prev & !bit
+                                };
+                                arc.store(next, Ordering::Relaxed);
+                                log::debug!(
+                                    "[win-kbd] {} {} → paddle_bits=0x{next:02X}",
+                                    if is_dit { "DIT" } else { "DAH" },
+                                    if k.kind == KeyEventKind::Press { "DOWN" } else { "UP" },
+                                );
+                            }
                         }
                     }
                 }

@@ -35,6 +35,8 @@ use hidapi::HidApi;
 use crate::config::PaddleMode;
 use crate::morse::decoder::PaddleEvent;
 use super::KeyerInput;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 pub const VBAND_VID: u16 = 0x413d;
@@ -44,11 +46,45 @@ pub const VBAND_PID: u16 = 0x2107;
 pub const DIT_MASK: u8 = 0x01;
 pub const DAH_MASK: u8 = 0x10;
 
+// ── Windows Raw-Key shim ──────────────────────────────────────────────────────
+//
+// When the VBand is only visible as the keyboard HID collection (\KBD path),
+// kbdhid.sys owns the device and all user-space ReadFile calls return nothing.
+// However, kbdhid.sys DOES translate the VBand's HID modifier byte into real
+// Windows key events.  The VBand uses the standard boot-protocol keyboard
+// modifier format:
+//
+//   HID byte 0 = 0x01  →  Left Control held  (DIT_MASK)
+//   HID byte 0 = 0x10  →  Right Control held (DAH_MASK)
+//
+// We can therefore recover the paddle state with GetAsyncKeyState, which
+// polls the low-level key state of individual virtual keys without requiring
+// a message loop.  This is poll-based, so it fits naturally into our
+// existing 1 ms polling loop.
+//
+// Virtual key codes:
+//   VK_LCONTROL = 0xA2 = 162   ← DIT
+//   VK_RCONTROL = 0xA3 = 163   ← DAH
+//
+// To avoid reporting spurious "changes" on every poll, we store the previous
+// bitmask in a Cell<u8> so read_raw (&self) can update it without &mut.
+
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn GetAsyncKeyState(vKey: i32) -> i16;
+}
+
+#[cfg(target_os = "windows")]
+const VK_LCONTROL: i32 = 0xA2;   // maps to DIT_MASK 0x01
+#[cfg(target_os = "windows")]
+const VK_RCONTROL: i32 = 0xA3;   // maps to DAH_MASK 0x10
+
 // ── Device backend ────────────────────────────────────────────────────────────
 
-/// Abstraction over the two USB access backends.
+/// Abstraction over the USB access backends.
 enum VBandDevice {
-    /// Standard hidapi path (HidUsb driver on Windows, native on Linux/macOS).
+    /// Standard hidapi path — works on Linux and macOS; on Windows only
+    /// available when a non-\KBD (generic HID) interface is exposed.
     Hid(hidapi::HidDevice),
     /// WinUSB / libusb path — used on Windows when the device has a
     /// WinUSB / libwdi driver installed (e.g. via Zadig).
@@ -57,11 +93,20 @@ enum VBandDevice {
         handle:   rusb::DeviceHandle<rusb::GlobalContext>,
         endpoint: u8,
     },
+    /// Windows keyboard-shim — used when only the \KBD HID collection is
+    /// exposed and kbdhid.sys blocks raw reads.  Polls GetAsyncKeyState for
+    /// LCtrl (DIT) and RCtrl (DAH) and re-synthesises the bitmask.
+    #[cfg(target_os = "windows")]
+    WinKbd {
+        dit_vk: i32,                    // VK_LCONTROL
+        dah_vk: i32,                    // VK_RCONTROL
+        prev:   std::cell::Cell<u8>,    // last reported bitmask (change detection)
+    },
 }
 
 /// Internal read result returned by [`VBandDevice::read_raw`].
 enum ReadResult {
-    /// New HID report arrived — `byte0` is the paddle bitmask.
+    /// New HID report arrived — `mask` is the extracted paddle bitmask.
     Report(u8),
     /// Timeout — no report, previous state stands.
     NoData,
@@ -70,16 +115,41 @@ enum ReadResult {
 }
 
 impl VBandDevice {
-    /// Read one USB report with a 1 ms timeout.
+    /// Read one USB report with a 1 ms timeout and extract the paddle bitmask.
     ///
-    /// Returns `Report(byte0)` when a new paddle event arrives, `NoData` on
-    /// timeout (VBand only sends on state change), or `Error` on I/O failure.
+    /// **Windows report-ID offset:**
+    /// hidapi on Windows always prepends a Report-ID byte to the input buffer:
+    /// - No-report-ID devices → 0x00 prepended  (buf[0]=0x00, data starts at buf[1])
+    /// - Report-ID N devices  → N prepended      (buf[0]=N,    data starts at buf[1])
+    ///
+    /// The VBand's keyboard HID collection sends a standard 8-byte keyboard
+    /// report where byte 0 is the modifier field (bit0=LCtrl=DIT, bit4=RCtrl=DAH).
+    /// After hidapi's report-ID prepend, that modifier byte sits at buf[1].
+    ///
+    /// On Linux/macOS hidapi does NOT prepend a report-ID byte, so the modifier
+    /// byte (or the raw bitmask for firmware using a custom report) is at buf[0].
+    ///
+    /// Fix: scan buf[0] and buf[1]; use whichever is non-zero (or buf[0] if both
+    /// zero, i.e. "all released").  This correctly handles both platforms and
+    /// both VBand firmware variants (custom bitmask report vs keyboard report).
     fn read_raw(&self, buf: &mut [u8]) -> ReadResult {
         match self {
             VBandDevice::Hid(dev) => {
                 match dev.read_timeout(buf, 1) {
-                    Ok(n) if n >= 1 => ReadResult::Report(buf[0]),
-                    Ok(_)           => ReadResult::NoData,
+                    Ok(n) if n >= 1 => {
+                        // Pick the first non-zero byte from buf[0..=1].
+                        // On Linux/macOS: paddle mask is in buf[0].
+                        // On Windows (keyboard HID + report-ID prepend): buf[0]=0x00, mask in buf[1].
+                        let mask = if buf[0] != 0 { buf[0] }
+                                   else if n >= 2 { buf[1] }
+                                   else           { 0 };
+                        log::debug!(
+                            "[vband/hid] n={n} buf[0]=0x{:02X} buf[1]=0x{:02X} → mask=0x{mask:02X}",
+                            buf[0], if n >= 2 { buf[1] } else { 0 }
+                        );
+                        ReadResult::Report(mask)
+                    }
+                    Ok(_) => ReadResult::NoData,
                     Err(e) => {
                         log::warn!("VBand HID read error: {e}");
                         ReadResult::Error
@@ -90,13 +160,38 @@ impl VBandDevice {
             #[cfg(all(feature = "keyer-vband-winusb", target_os = "windows"))]
             VBandDevice::WinUsb { handle, endpoint } => {
                 match handle.read_interrupt(*endpoint, buf, Duration::from_millis(1)) {
-                    Ok(n) if n >= 1            => ReadResult::Report(buf[0]),
+                    Ok(n) if n >= 1 => {
+                        let mask = if buf[0] != 0 { buf[0] }
+                                   else if n >= 2 { buf[1] }
+                                   else           { 0 };
+                        ReadResult::Report(mask)
+                    }
                     Ok(_)                      => ReadResult::NoData,
                     Err(rusb::Error::Timeout)  => ReadResult::NoData,
                     Err(e) => {
                         log::warn!("VBand WinUSB read error: {e}");
                         ReadResult::Error
                     }
+                }
+            }
+
+            // ── Windows keyboard shim ─────────────────────────────────────
+            // kbdhid.sys translates the VBand's modifier byte into LCtrl/RCtrl
+            // key events.  GetAsyncKeyState polls the live key state; we
+            // reconstruct the bitmask and report only on change.
+            #[cfg(target_os = "windows")]
+            VBandDevice::WinKbd { dit_vk, dah_vk, prev } => {
+                let lctrl = unsafe { GetAsyncKeyState(*dit_vk) } as u16 & 0x8000 != 0;
+                let rctrl = unsafe { GetAsyncKeyState(*dah_vk) } as u16 & 0x8000 != 0;
+                // Reconstruct bitmask: DIT_MASK=0x01, DAH_MASK=0x10
+                let mask = (lctrl as u8) | ((rctrl as u8) << 4);
+                let old  = prev.get();
+                if mask != old {
+                    prev.set(mask);
+                    log::debug!("[vband/winkbd] LCtrl={lctrl} RCtrl={rctrl} → mask=0x{mask:02X}");
+                    ReadResult::Report(mask)
+                } else {
+                    ReadResult::NoData
                 }
             }
         }
@@ -108,23 +203,90 @@ impl VBandDevice {
             VBandDevice::Hid(_) => "HidApi",
             #[cfg(all(feature = "keyer-vband-winusb", target_os = "windows"))]
             VBandDevice::WinUsb { .. } => "WinUSB",
+            #[cfg(target_os = "windows")]
+            VBandDevice::WinKbd { .. } => "WinKbd (GetAsyncKeyState)",
         }
     }
 }
 
 // ── Open helpers ──────────────────────────────────────────────────────────────
 
+/// Returns true when the ONLY HID interface for the VBand on Windows is the
+/// keyboard collection (path ends `\KBD`).  kbdhid.sys owns this interface
+/// exclusively — raw HID reads return nothing.  The caller should switch to
+/// the keyboard-event shim (`VBandWindowsKeyer`) instead.
+#[cfg(target_os = "windows")]
+pub fn is_kbd_only_interface() -> bool {
+    let Ok(api) = HidApi::new() else { return false; };
+    let paths: Vec<_> = api.device_list()
+        .filter(|d| d.vendor_id() == VBAND_VID && d.product_id() == VBAND_PID)
+        .map(|d| d.path().to_string_lossy().to_uppercase())
+        .collect();
+    // Present + every path ends with \KBD → keyboard-only
+    !paths.is_empty() && paths.iter().all(|p| p.ends_with("\\KBD"))
+}
+
 /// Try to open the VBand adapter through any available backend.
-///
-/// Order: HidApi → WinUSB (Windows + feature only).
+/// Returns Err (with a descriptive message) if no readable interface is found.
 fn open_device() -> Result<VBandDevice> {
-    // ── 1. HidApi (preferred) ─────────────────────────────────────────────
-    match HidApi::new().and_then(|api| api.open(VBAND_VID, VBAND_PID)) {
-        Ok(dev) => {
-            log::debug!("[vband] opened via HidApi");
-            return Ok(VBandDevice::Hid(dev));
+    // ── 1. HidApi ─────────────────────────────────────────────────────────
+    //
+    // On Windows the VBand exposes a \KBD top-level collection owned by
+    // kbdhid.sys.  ReadFile on that interface always returns nothing.
+    // If a non-\KBD (generic HID) path exists we prefer it; otherwise we
+    // fall through to the WinKbd shim below.
+    if let Ok(api) = HidApi::new() {
+        let all_paths: Vec<_> = api.device_list()
+            .filter(|d| d.vendor_id() == VBAND_VID && d.product_id() == VBAND_PID)
+            .map(|d| d.path().to_owned())
+            .collect();
+
+        // Skip \KBD paths on Windows; keep all paths on Linux / macOS.
+        let readable: Vec<_> = all_paths.iter().filter(|p| {
+            #[cfg(target_os = "windows")]
+            { !p.to_string_lossy().to_uppercase().ends_with("\\KBD") }
+            #[cfg(not(target_os = "windows"))]
+            { let _ = p; true }
+        }).collect();
+
+        // Prefer readable; fall back to all paths on non-Windows as last resort.
+        let candidates: Vec<_> = if !readable.is_empty() {
+            readable
+        } else {
+            #[cfg(not(target_os = "windows"))]
+            { all_paths.iter().collect() }
+            #[cfg(target_os = "windows")]
+            { vec![] }   // KBD-only on Windows → WinKbd fallback
+        };
+
+        for path in candidates {
+            match api.open_path(path) {
+                Ok(dev) => {
+                    log::info!("[vband] opened via HidApi  path={}", path.to_string_lossy());
+                    return Ok(VBandDevice::Hid(dev));
+                }
+                Err(e) => log::debug!("[vband] HidApi open_path({}) failed: {e}", path.to_string_lossy()),
+            }
         }
-        Err(e) => log::debug!("[vband] HidApi open failed: {e}"),
+        if !all_paths.is_empty() {
+            log::debug!("[vband] {} HID path(s) found but none readable", all_paths.len());
+        }
+    }
+
+    // ── 2. WinKbd shim (Windows only) ─────────────────────────────────────
+    // Only the \KBD interface exists; kbdhid.sys translates VBand modifier
+    // byte → LCtrl (DIT) / RCtrl (DAH) key events.  Read via GetAsyncKeyState.
+    #[cfg(target_os = "windows")]
+    if is_kbd_only_interface() {
+        log::info!(
+            "[vband] KBD-only interface detected — using WinKbd (GetAsyncKeyState) shim.\
+             \n  DIT = Left Ctrl  |  DAH = Right Ctrl"
+        );
+        return Ok(VBandDevice::WinKbd {
+            dit_vk: VK_LCONTROL,
+            dah_vk: VK_RCONTROL,
+            prev:   std::cell::Cell::new(0),
+        });
     }
 
     // ── 2. WinUSB fallback (Windows, feature "keyer-vband-winusb") ────────
@@ -151,13 +313,14 @@ fn build_open_hint() -> &'static str {
          \n  Permanent:  install udev rule 99-vband-cw.rules (see top of vband.rs)"
     } else if cfg!(target_os = "windows") {
         "\n  Hint: Is the VBand plugged in?\
-         \n  ‣ If the HidUsb driver is loaded, make sure no other VBand software has\
-         \n    the device open.\
-         \n  ‣ If you installed a WinUSB / libwdi driver via Zadig and this build does\
-         \n    NOT include 'keyer-vband-winusb', rebuild with that feature enabled:\
-         \n      cargo build --features keyer-vband-winusb\
-         \n  ‣ To restore the original HID driver: open Device Manager, right-click the\
-         \n    VBand device → Update driver → Browse → Let me pick → HID-compliant device."
+         \n  ‣ The adapter should appear in Device Manager under Human Interface Devices.\
+         \n  ‣ If another VBand application is running, close it first."
+    } else if cfg!(target_os = "macos") {
+        "\n  Hint: macOS 14+ requires Input Monitoring permission for HID devices.\
+         \n  → System Settings → Privacy & Security → Input Monitoring\
+         \n  → Add your terminal app (Terminal, iTerm2, …) and re-launch it.\
+         \n  The device must also be visible in: Apple menu → About This Mac\
+         \n  → System Report → USB."
     } else {
         ""
     }
@@ -218,10 +381,9 @@ pub struct VBandKeyer {
     last_el:   Option<bool>,   // false = dit, true = dah
     el_end:    Instant,
     // Squeeze detection
-    prev_dit:       bool,   // paddle state at previous poll (edge detection)
+    prev_dit:       bool,
     prev_dah:       bool,
-    squeeze_active: bool,   // true while both paddles have been pressed together
-                            // in this run; cleared only when both released
+    squeeze_active: bool,
 }
 
 impl VBandKeyer {
@@ -277,7 +439,7 @@ impl VBandKeyer {
                 self.last_dit = (mask & self.dit_mask) != 0;
                 self.last_dah = (mask & self.dah_mask) != 0;
                 log::debug!(
-                    "[vband/{}] byte0=0x{mask:02X}  dit={}  dah={}",
+                    "[vband/{}] mask=0x{mask:02X}  dit={}  dah={}",
                     self.device.backend_name(), self.last_dit, self.last_dah
                 );
             }
@@ -434,6 +596,171 @@ impl KeyerInput for VBandKeyer {
     }
 }
 
+// ── VBandWindowsKeyer ─────────────────────────────────────────────────────────
+//
+// On Windows the VBand registers as a keyboard HID device.  kbdhid.sys claims
+// exclusive ownership of the USB interrupt endpoint, so raw HID reads via
+// hidapi always return nothing.  Instead, Windows translates the paddle
+// presses into standard keyboard events:
+//
+//   DIT paddle  →  Left Control  (modifier bit 0x01 = DIT_MASK)
+//   DAH paddle  →  Right Control (modifier bit 0x10 = DAH_MASK)
+//
+// Those key events flow through the normal Windows console input queue and are
+// readable by crossterm's ReadConsoleInput loop in main.rs.
+//
+// VBandWindowsKeyer shares an AtomicU8 with the main event loop:
+//   bit 0  (0x01) = DIT currently held
+//   bit 4  (0x10) = DAH currently held
+//
+// The main loop sets/clears the bits on LCtrl/RCtrl keydown/keyup events.
+// VBandWindowsKeyer::poll() reads the atomic and runs the standard iambic FSM
+// — identical logic to VBandKeyer::poll().
+
+pub struct VBandWindowsKeyer {
+    /// Shared paddle state: bit0=DIT, bit4=DAH.  Updated by main event loop.
+    pub paddle_state:   Arc<AtomicU8>,
+    mode:               PaddleMode,
+    dit_mask:           u8,
+    dah_mask:           u8,
+    el_dur:             Duration,
+    dit_mem:            bool,
+    dah_mem:            bool,
+    last_el:            Option<bool>,
+    el_end:             Instant,
+    prev_dit:           bool,
+    prev_dah:           bool,
+    squeeze_active:     bool,
+}
+
+impl VBandWindowsKeyer {
+    /// Create the keyer and return a clone of the shared paddle-state arc so
+    /// the caller (main loop) can update it from crossterm events.
+    pub fn new(
+        mode:         PaddleMode,
+        dot_duration: Duration,
+        dit_mask:     u8,
+        dah_mask:     u8,
+    ) -> (Self, Arc<AtomicU8>) {
+        let paddle_state = Arc::new(AtomicU8::new(0));
+        let shared       = Arc::clone(&paddle_state);
+        log::info!(
+            "[vband/win-kbd] Using Windows keyboard-event shim \
+             (LCtrl=DIT, RCtrl=DAH)  mode={mode:?}  dot={}ms",
+            dot_duration.as_millis()
+        );
+        (Self {
+            paddle_state,
+            mode,
+            dit_mask,
+            dah_mask,
+            el_dur:         dot_duration,
+            dit_mem:        false,
+            dah_mem:        false,
+            last_el:        None,
+            el_end:         Instant::now(),
+            prev_dit:       false,
+            prev_dah:       false,
+            squeeze_active: false,
+        }, shared)
+    }
+}
+
+impl KeyerInput for VBandWindowsKeyer {
+    fn name(&self) -> &str { "VBand (Windows keyboard shim)" }
+
+    fn poll(&mut self) -> PaddleEvent {
+        let bits        = self.paddle_state.load(Ordering::Relaxed);
+        let dit_pressed = (bits & self.dit_mask) != 0;
+        let dah_pressed = (bits & self.dah_mask) != 0;
+        let now         = Instant::now();
+
+        match self.mode {
+            PaddleMode::Straight => {
+                if dit_pressed { PaddleEvent::DitDown } else { PaddleEvent::DitUp }
+            }
+
+            PaddleMode::IambicA => {
+                let dit_edge = dit_pressed && !self.prev_dit;
+                let dah_edge = dah_pressed && !self.prev_dah;
+                self.prev_dit = dit_pressed;
+                self.prev_dah = dah_pressed;
+                if dit_pressed && dah_pressed { self.squeeze_active = true; }
+                if dit_edge { self.dit_mem = true; }
+                if dah_edge { self.dah_mem = true; }
+                if now < self.el_end {
+                    if dit_pressed && dah_pressed {
+                        match self.last_el {
+                            Some(true)  => { self.dit_mem = true; }
+                            Some(false) => { self.dah_mem = true; }
+                            None        => {}
+                        }
+                    }
+                    return PaddleEvent::None;
+                }
+                if !self.squeeze_active {
+                    if dit_pressed && !dah_pressed { self.dit_mem = true; }
+                    if dah_pressed && !dit_pressed { self.dah_mem = true; }
+                }
+                let send_dit = if dit_pressed && dah_pressed {
+                    let s = match self.last_el { None => true, Some(was_dah) => was_dah };
+                    if s { self.dit_mem = false; } else { self.dah_mem = false; }
+                    s
+                } else if self.dit_mem {
+                    self.dit_mem = false; true
+                } else if self.dah_mem {
+                    self.dah_mem = false; false
+                } else {
+                    if !dit_pressed && !dah_pressed { self.squeeze_active = false; }
+                    self.last_el = None;
+                    return PaddleEvent::None;
+                };
+                let dur = if send_dit { self.el_dur } else { self.el_dur * 3 };
+                self.el_end  = now + dur + self.el_dur;
+                self.last_el = Some(!send_dit);
+                if send_dit { PaddleEvent::DitDown } else { PaddleEvent::DahDown }
+            }
+
+            PaddleMode::IambicB => {
+                let dit_edge = dit_pressed && !self.prev_dit;
+                let dah_edge = dah_pressed && !self.prev_dah;
+                self.prev_dit = dit_pressed;
+                self.prev_dah = dah_pressed;
+                if dit_pressed && dah_pressed  { self.squeeze_active = true;  }
+                if !dit_pressed && !dah_pressed { self.squeeze_active = false; }
+                if dit_edge { self.dit_mem = true; }
+                if dah_edge { self.dah_mem = true; }
+                if now < self.el_end {
+                    match self.last_el {
+                        Some(true)  => { if dit_pressed { self.dit_mem = true; } }
+                        Some(false) => { if dah_pressed { self.dah_mem = true; } }
+                        None        => {}
+                    }
+                    return PaddleEvent::None;
+                }
+                if dit_pressed { self.dit_mem = true; }
+                if dah_pressed { self.dah_mem = true; }
+                let send_dit = if dit_pressed && dah_pressed {
+                    let s = match self.last_el { None => true, Some(was_dah) => was_dah };
+                    if s { self.dit_mem = false; } else { self.dah_mem = false; }
+                    s
+                } else if self.dit_mem {
+                    self.dit_mem = false; true
+                } else if self.dah_mem {
+                    self.dah_mem = false; false
+                } else {
+                    self.last_el = None;
+                    return PaddleEvent::None;
+                };
+                let dur = if send_dit { self.el_dur } else { self.el_dur * 3 };
+                self.el_end  = now + dur + self.el_dur;
+                self.last_el = Some(!send_dit);
+                if send_dit { PaddleEvent::DitDown } else { PaddleEvent::DahDown }
+            }
+        }
+    }
+}
+
 // ── Detection helpers ─────────────────────────────────────────────────────────
 
 /// Check if the VBand adapter is plugged in (any backend).
@@ -511,6 +838,29 @@ pub fn list_vband_devices() -> Vec<String> {
 
 // ── Interactive adapter check ─────────────────────────────────────────────────
 
+/// Print a platform-specific hint after a failed check, based on how many
+/// zero-data reads we accumulated (high count = device open but silent).
+fn print_check_hint(zero_reads: u32) {
+    // High zero_reads means the device opened and polled fine but returned
+    // nothing — typical symptom of a permission gate or driver block.
+    if zero_reads > 500 {
+        #[cfg(target_os = "macos")]
+        println!(
+            "  macOS hint: the device opened but returned no data.\
+             \n  This is almost always an Input Monitoring permission problem.\
+             \n  → System Settings → Privacy & Security → Input Monitoring\
+             \n  → Add your terminal app (Terminal.app, iTerm2, …)\
+             \n  → Quit and re-launch the terminal, then run this test again."
+        );
+        #[cfg(target_os = "windows")]
+        println!(
+            "  Windows hint: the device opened but returned no data.\
+             \n  Running as WinKbd shim — make sure no other software holds\
+             \n  exclusive access to LCtrl / RCtrl keys (e.g. macro apps)."
+        );
+    }
+}
+
 /// Open the VBand, wait for each paddle in turn.
 /// Returns `Ok(true)` if both paddles pass within `timeout`.
 pub fn check_adapter(timeout: Duration) -> anyhow::Result<bool> {
@@ -522,51 +872,77 @@ pub fn check_adapter(timeout: Duration) -> anyhow::Result<bool> {
         }
     };
 
-    println!("Adapter : VBand HID {:04x}:{:04x}  [{}]", VBAND_VID, VBAND_PID, device.backend_name());
-    println!("Protocol: HID byte0 bitmask  DIT=0x{DIT_MASK:02X}  DAH=0x{DAH_MASK:02X}");
+    let backend = device.backend_name();
+    println!("Adapter : VBand HID {:04x}:{:04x}  [{backend}]", VBAND_VID, VBAND_PID);
+    #[cfg(target_os = "windows")]
+    if matches!(device, VBandDevice::WinKbd { .. }) {
+        println!("Protocol: Windows keyboard shim  DIT=LCtrl  DAH=RCtrl");
+    } else {
+        println!("Protocol: HID bitmask  DIT=0x{DIT_MASK:02X}  DAH=0x{DAH_MASK:02X}");
+    }
+    #[cfg(not(target_os = "windows"))]
+    println!("Protocol: HID bitmask  DIT=0x{DIT_MASK:02X}  DAH=0x{DAH_MASK:02X}");
     println!();
 
     let mut dit_ok = false;
     let mut dah_ok = false;
     let mut buf = [0u8; 64];
+    let mut zero_read_count = 0u32;
 
     // Step 1: DIT
     println!("[ 1/2 ]  Press DIT paddle now …");
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if let ReadResult::Report(mask) = device.read_raw(&mut buf) {
-            let dit = (mask & DIT_MASK) != 0;
-            let dah = (mask & DAH_MASK) != 0;
-            log::debug!("[vband-check] byte0=0x{mask:02X} dit={dit} dah={dah}");
-            if dit {
-                println!("         ✓ DIT received  (byte0=0x{mask:02X})");
-                dit_ok = true;
-                break;
-            } else if dah {
-                println!("         ✗ Got DAH instead of DIT — paddles may be swapped, try --switch-paddle");
+        match device.read_raw(&mut buf) {
+            ReadResult::Report(mask) => {
+                zero_read_count = 0;
+                let dit = (mask & DIT_MASK) != 0;
+                let dah = (mask & DAH_MASK) != 0;
+                log::debug!("[vband-check] mask=0x{mask:02X} dit={dit} dah={dah}");
+                if dit {
+                    println!("         ✓ DIT received  (mask=0x{mask:02X})");
+                    dit_ok = true;
+                    break;
+                } else if dah {
+                    println!("         ✗ Got DAH instead of DIT — paddles may be swapped, try --switch-paddle");
+                }
             }
+            ReadResult::NoData => { zero_read_count += 1; }
+            ReadResult::Error  => {}
         }
     }
-    if !dit_ok { println!("         ✗ DIT timeout — no DIT event received"); }
+    if !dit_ok {
+        println!("         ✗ DIT timeout — no DIT event received");
+        print_check_hint(zero_read_count);
+    }
 
     // Step 2: DAH
+    zero_read_count = 0;
     println!("[ 2/2 ]  Press DAH paddle now …");
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
-        if let ReadResult::Report(mask) = device.read_raw(&mut buf) {
-            let dit = (mask & DIT_MASK) != 0;
-            let dah = (mask & DAH_MASK) != 0;
-            log::debug!("[vband-check] byte0=0x{mask:02X} dit={dit} dah={dah}");
-            if dah {
-                println!("         ✓ DAH received  (byte0=0x{mask:02X})");
-                dah_ok = true;
-                break;
-            } else if dit {
-                println!("         ✗ Got DIT instead of DAH — paddles may be swapped, try --switch-paddle");
+        match device.read_raw(&mut buf) {
+            ReadResult::Report(mask) => {
+                zero_read_count = 0;
+                let dit = (mask & DIT_MASK) != 0;
+                let dah = (mask & DAH_MASK) != 0;
+                log::debug!("[vband-check] mask=0x{mask:02X} dit={dit} dah={dah}");
+                if dah {
+                    println!("         ✓ DAH received  (mask=0x{mask:02X})");
+                    dah_ok = true;
+                    break;
+                } else if dit {
+                    println!("         ✗ Got DIT instead of DAH — paddles may be swapped, try --switch-paddle");
+                }
             }
+            ReadResult::NoData => { zero_read_count += 1; }
+            ReadResult::Error  => {}
         }
     }
-    if !dah_ok { println!("         ✗ DAH timeout — no DAH event received"); }
+    if !dah_ok {
+        println!("         ✗ DAH timeout — no DAH event received");
+        print_check_hint(zero_read_count);
+    }
 
     println!();
     if dit_ok && dah_ok {

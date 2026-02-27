@@ -70,14 +70,34 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
 
     #[cfg(feature = "keyer-vband")]
     {
-        // Try to actually open the device — listing it is not enough because
-        // hidapi can enumerate VBand even when /dev/hidraw* lacks permissions.
+        // Try to actually open the readable (non-KBD) interface.
+        // On Windows the VBand exposes two HID collections; the \KBD one is
+        // owned by kbdhid.sys and opens fine but is silently unreadable.
+        // We must verify the non-KBD path is accessible here too.
         if let Ok(api) = hidapi::HidApi::new() {
-            if api.open(vband::VBAND_VID, vband::VBAND_PID).is_ok() {
-                log::info!("[autodetect] VBand HID found and accessible");
-                return AdapterType::Vband;
-            } else if !vband::list_vband_devices().is_empty() {
-                log::warn!("[autodetect] VBand detected but cannot open — check /dev/hidraw* permissions");
+            let non_kbd_path = api.device_list()
+                .filter(|d| d.vendor_id() == vband::VBAND_VID
+                         && d.product_id() == vband::VBAND_PID)
+                .filter(|d| {
+                    let p = d.path().to_string_lossy();
+                    !p.to_uppercase().ends_with("\\KBD")
+                })
+                .map(|d| d.path().to_owned())
+                .next()
+                .or_else(|| {
+                    api.device_list()
+                        .find(|d| d.vendor_id() == vband::VBAND_VID
+                               && d.product_id() == vband::VBAND_PID)
+                        .map(|d| d.path().to_owned())
+                });
+
+            if let Some(p) = non_kbd_path {
+                if api.open_path(&p).is_ok() {
+                    log::info!("[autodetect] VBand HID found and accessible");
+                    return AdapterType::Vband;
+                } else {
+                    log::warn!("[autodetect] VBand detected but cannot open — check /dev/hidraw* permissions");
+                }
             }
         }
     }
@@ -103,18 +123,22 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
 
 /// Factory — `dot_dur` comes from `Timing::from_wpm(cfg.wpm).dot`
 ///
-/// Returns `(keyer, is_keyboard)`.
-/// When `is_keyboard` is true the main loop must read crossterm events
-/// and forward paddle keys directly to the `tx_key` channel itself —
-/// the keyer thread will only produce `PaddleEvent::None` for the stub.
-/// Hardware adapters poll their own device so `is_keyboard` is false.
+/// Returns `(keyer, is_keyboard, windows_paddle)`.
+///
+/// `is_keyboard`     — when true the main loop must read crossterm events
+///                     and forward paddle keys to the tx_key channel itself.
+///                     Hardware adapters poll their own device → false.
+///
+/// `windows_paddle`  — Some(arc) only when VBandWindowsKeyer is used.
+///                     The main loop must update bit0=DIT, bit4=DAH from
+///                     LCtrl/RCtrl crossterm key events.  None otherwise.
 pub fn create_keyer(
     adapter:       crate::config::AdapterType,
     port:          &str,
     mode:          crate::config::PaddleMode,
     dot_dur:       std::time::Duration,
     switch_paddle: bool,
-) -> Result<(Box<dyn KeyerInput>, bool)> {
+) -> Result<(Box<dyn KeyerInput>, bool, Option<std::sync::Arc<std::sync::atomic::AtomicU8>>)> {
     use crate::config::AdapterType;
 
     // Resolve Auto before matching
@@ -129,7 +153,7 @@ pub fn create_keyer(
     match adapter {
         AdapterType::Auto => unreachable!(),
         AdapterType::Keyboard | AdapterType::Text | AdapterType::None => {
-            Ok((Box::new(keyboard::KeyboardKeyer::new()), true))
+            Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
         }
         AdapterType::Vband => {
             #[cfg(feature = "keyer-vband")]
@@ -140,24 +164,37 @@ pub fn create_keyer(
                     (vband::DIT_MASK, vband::DAH_MASK)
                 };
                 if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
-                Ok((Box::new(vband::VBandKeyer::new_with_masks(mode, dot_dur, dit_mask, dah_mask)?), false))
+
+                // On Windows: if only the keyboard HID collection is available
+                // (kbdhid.sys exclusive), raw HID reads return nothing.
+                // Use the keyboard-event shim instead — it reads LCtrl/RCtrl
+                // events injected by the main crossterm loop.
+                #[cfg(target_os = "windows")]
+                if vband::is_kbd_only_interface() {
+                    let (keyer, paddle_arc) = vband::VBandWindowsKeyer::new(
+                        mode, dot_dur, dit_mask, dah_mask,
+                    );
+                    return Ok((Box::new(keyer), false, Some(paddle_arc)));
+                }
+
+                Ok((Box::new(vband::VBandKeyer::new_with_masks(mode, dot_dur, dit_mask, dah_mask)?), false, None))
             }
             #[cfg(not(feature = "keyer-vband"))]
             {
                 log::warn!("adapter = \"vband\" in config but this build has no VBand support — falling back to keyboard text-input");
-                Ok((Box::new(keyboard::KeyboardKeyer::new()), true))
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
             }
         }
         AdapterType::Attiny85 => {
             #[cfg(feature = "keyer-attiny85")]
             {
                 if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
-                Ok((Box::new(attiny85::Attiny85Keyer::new(mode, dot_dur, port, switch_paddle)?), false))
+                Ok((Box::new(attiny85::Attiny85Keyer::new(mode, dot_dur, port, switch_paddle)?), false, None))
             }
             #[cfg(not(feature = "keyer-attiny85"))]
             {
                 log::warn!("adapter = \"attiny85\" in config but this build has no ATtiny85 support — falling back to keyboard text-input");
-                Ok((Box::new(keyboard::KeyboardKeyer::new()), true))
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
             }
         }
     }

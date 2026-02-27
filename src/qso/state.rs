@@ -160,7 +160,7 @@ impl QsoEngine {
                     let tx = self.maybe_typo(&self.script.ack_report.clone());
                     self.last_tx = tx.clone();
                     let next_phase = match self.style {
-                        QsoStyle::Contest | QsoStyle::DxPileup => Phase::SignOff,
+                        QsoStyle::Contest | QsoStyle::DxPileup | QsoStyle::DarcCwContest => Phase::SignOff,
                         _ => Phase::Chat { turn: 0 },
                     };
                     self.phase = next_phase;
