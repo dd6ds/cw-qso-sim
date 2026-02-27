@@ -73,7 +73,7 @@ OPTIONS:
     --port <PORT>            Serial / MIDI port (ATtiny85 port name/substring)
     --midi-port <PORT>       MIDI port override for ATtiny85 (takes precedence over --port)
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
-    --style <STYLE>          ragchew | contest | dx_pileup | random
+    --style <STYLE>          ragchew | contest | dx_pileup | random | darc-cw-contes
     --lang <LANG>            en | de | fr | it
     --config <PATH>          Custom config file path
     --write-config           Write the built-in default config.toml and exit
