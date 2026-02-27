@@ -180,6 +180,22 @@ KERNEL=="ttyACM*",  ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0753", MODE:="06
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="16d0", ATTRS{idProduct}=="0753", MODE:="0666"
 ```
 
+Create `/etc/udev/rules.d/49-arduino-uno.rules`:    (WIP)
+
+
+```
+# Arduino Uno (Original, with ATmega16U2 USB interface)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0043", MODE:="0666"
+KERNEL=="ttyACM*", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0043", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+# Arduino Uno (Clone boards using CH340 USB–serial chip)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE:="0666"
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+```
+
+
+
+
 Then reload: `sudo udevadm control --reload-rules && sudo udevadm trigger`
 
 #### Programming the ATtiny85
