@@ -171,10 +171,22 @@ ATtiny85 GND         →  Paddle common ground
 #### Wiring
 
 ```
-ATtiny85 Pin 2 (D2)  →  LEFT  paddle (DIT)
-ATtiny85 Pin 3 (D3)  →  RIGHT paddle (DAH)
-ATtiny85 GND         →  Paddle common ground
+UNO Pin 2 (D2)  →  LEFT  paddle (DIT)
+UNO Pin 3 (D3)  →  RIGHT paddle (DAH)
+UNO GND         →  Paddle common ground
 ```
+
+### Arduino Nano (all platforms)
+
+#### Wiring
+
+```
+Nano Pin 2 (D2)  →  LEFT  paddle (DIT)
+Nano Pin 3 (D3)  →  RIGHT paddle (DAH)
+Nnano GND        →  Paddle common ground
+```
+
+
 
 
 #### udev rule (Linux / Debian / Mint)
