@@ -41,10 +41,13 @@ pub struct Attiny85Keyer {
     _conn:    MidiInputConnection<()>,
     mode:     crate::config::PaddleMode,
     el_dur:   Duration,
-    pub dit_mem:  bool,
-    pub dah_mem:  bool,
-    pub last_el:  Option<bool>,
-    pub el_end:   Instant,
+    pub dit_mem:        bool,
+    pub dah_mem:        bool,
+    pub last_el:        Option<bool>,
+    pub el_end:         Instant,
+    pub prev_dit:       bool,
+    pub prev_dah:       bool,
+    pub squeeze_active: bool,
     switch_paddle: bool,
 }
 
@@ -144,6 +147,9 @@ impl Attiny85Keyer {
             dah_mem: false,
             last_el: None,
             el_end: std::time::Instant::now(),
+            prev_dit: false,
+            prev_dah: false,
+            squeeze_active: false,
             switch_paddle,
         })
     }
@@ -209,10 +215,13 @@ pub fn check_adapter(port_hint: &str, timeout: Duration) -> Result<bool> {
     if !dit_ok { println!("         ✗ DIT timeout — no DIT event received"); }
 
     // Reset FSM state between tests
-    keyer.dit_mem  = false;
-    keyer.dah_mem  = false;
-    keyer.last_el  = None;
-    keyer.el_end   = Instant::now();
+    keyer.dit_mem       = false;
+    keyer.dah_mem       = false;
+    keyer.last_el       = None;
+    keyer.el_end        = Instant::now();
+    keyer.prev_dit      = false;
+    keyer.prev_dah      = false;
+    keyer.squeeze_active = false;
 
     // ── Step 2: DAH ───────────────────────────────────────────────────────────
     println!("[ 2/2 ]  Press DAH paddle now …");
@@ -273,41 +282,84 @@ impl KeyerInput for Attiny85Keyer {
             }
 
             PaddleMode::IambicA | PaddleMode::IambicB => {
-                // During active element: only latch the OPPOSITE paddle (squeeze memory)
+                // ── Edge / squeeze tracking ───────────────────────────────────
+                let dit_edge = dit_pressed && !self.prev_dit;
+                let dah_edge = dah_pressed && !self.prev_dah;
+                self.prev_dit = dit_pressed;
+                self.prev_dah = dah_pressed;
+
+                // IambicA: squeeze latch cleared only at true idle — see return-None
+                // IambicB: cleared when both released (bonus-element mode)
+                if dit_pressed && dah_pressed { self.squeeze_active = true; }
+                if self.mode == PaddleMode::IambicB && !dit_pressed && !dah_pressed {
+                    self.squeeze_active = false;
+                }
+
+                if dit_edge { self.dit_mem = true; }
+                if dah_edge { self.dah_mem = true; }
+
+                // ── During element ────────────────────────────────────────────
                 if now < self.el_end {
-                    match self.last_el {
-                        Some(true)  => { if dit_pressed { self.dit_mem = true; } }
-                        Some(false) => { if dah_pressed { self.dah_mem = true; } }
-                        None        => {}
+                    match self.mode {
+                        // IambicA: opposite memory only on true squeeze
+                        PaddleMode::IambicA => {
+                            if dit_pressed && dah_pressed {
+                                match self.last_el {
+                                    Some(true)  => { self.dit_mem = true; }
+                                    Some(false) => { self.dah_mem = true; }
+                                    None        => {}
+                                }
+                            }
+                        }
+                        // IambicB: opposite memory from single paddle too
+                        _ => {
+                            match self.last_el {
+                                Some(true)  => { if dit_pressed { self.dit_mem = true; } }
+                                Some(false) => { if dah_pressed { self.dah_mem = true; } }
+                                None        => {}
+                            }
+                        }
                     }
                     return PaddleEvent::None;
                 }
 
-                // Inter-element gap: accept both paddles
-                if dit_pressed { self.dit_mem = true; }
-                if dah_pressed { self.dah_mem = true; }
+                // ── Element complete: decide next ─────────────────────────────
+                match self.mode {
+                    PaddleMode::IambicA => {
+                        // Single-paddle re-arm blocked inside a squeeze sequence
+                        if !self.squeeze_active {
+                            if dit_pressed && !dah_pressed { self.dit_mem = true; }
+                            if dah_pressed && !dit_pressed { self.dah_mem = true; }
+                        }
+                    }
+                    _ => {
+                        // IambicB: re-arm freely
+                        if dit_pressed { self.dit_mem = true; }
+                        if dah_pressed { self.dah_mem = true; }
+                    }
+                }
 
                 let send_dit = if dit_pressed && dah_pressed {
-                    match self.last_el {
-                        None          => true,
-                        Some(was_dah) => was_dah,
-                    }
-                } else if self.dit_mem || dit_pressed {
-                    self.dit_mem = false;
-                    true
-                } else if self.dah_mem || dah_pressed {
-                    self.dah_mem = false;
-                    false
+                    let s = match self.last_el { None => true, Some(was_dah) => was_dah };
+                    if s { self.dit_mem = false; } else { self.dah_mem = false; }
+                    s
+                } else if self.dit_mem {
+                    self.dit_mem = false; true
+                } else if self.dah_mem {
+                    self.dah_mem = false; false
                 } else {
-                    self.dit_mem = false;
-                    self.dah_mem = false;
+                    // IambicA: clear squeeze latch only at true idle
+                    // (not mid-sequence, to prevent contact-bounce false resets)
+                    if self.mode == PaddleMode::IambicA && !dit_pressed && !dah_pressed {
+                        self.squeeze_active = false;
+                    }
+                    self.last_el = None;
                     return PaddleEvent::None;
                 };
 
                 let dur = if send_dit { self.el_dur } else { self.el_dur * 3 };
                 self.el_end  = now + dur + self.el_dur;
                 self.last_el = Some(!send_dit);
-
                 if send_dit { PaddleEvent::DitDown } else { PaddleEvent::DahDown }
             }
         }

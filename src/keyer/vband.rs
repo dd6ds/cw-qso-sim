@@ -217,6 +217,11 @@ pub struct VBandKeyer {
     dah_mem:   bool,
     last_el:   Option<bool>,   // false = dit, true = dah
     el_end:    Instant,
+    // Squeeze detection
+    prev_dit:       bool,   // paddle state at previous poll (edge detection)
+    prev_dah:       bool,
+    squeeze_active: bool,   // true while both paddles have been pressed together
+                            // in this run; cleared only when both released
 }
 
 impl VBandKeyer {
@@ -252,6 +257,9 @@ impl VBandKeyer {
             dah_mem: false,
             last_el: None,
             el_end:  Instant::now(),
+            prev_dit:       false,
+            prev_dah:       false,
+            squeeze_active: false,
         })
     }
 
@@ -296,26 +304,71 @@ impl KeyerInput for VBandKeyer {
                 else           { PaddleEvent::DitUp   }
             }
 
+            // ── IambicA — strict squeeze ──────────────────────────────────────
+            // Opposite memory is only captured when BOTH paddles are pressed
+            // simultaneously (a true squeeze).  Single-paddle continuous re-arm
+            // is blocked while squeeze_active, so the alternation stops cleanly
+            // once the secondary paddle is released and its memory consumed.
+            //
+            // Example: hold DAH, tap DIT  →  DAH DIT DAH DIT  (C)  then stops.
+            //
+            // IMPORTANT — squeeze latch lifetime:
+            // squeeze_active is set when both paddles are pressed together and
+            // cleared ONLY when the keyer returns to true idle (both paddles
+            // released, no pending memories).  Clearing it on every
+            // "both-released" HID report lets contact-bounce glitches or a
+            // brief inter-paddle gap reset the latch mid-sequence, producing
+            // one spurious extra element (e.g. C → DAH DIT DAH DIT DAH).
             PaddleMode::IambicA => {
+                // ── Edge / squeeze tracking ───────────────────────────────────
+                let dit_edge = dit_pressed && !self.prev_dit;
+                let dah_edge = dah_pressed && !self.prev_dah;
+                self.prev_dit = dit_pressed;
+                self.prev_dah = dah_pressed;
+
+                // Latch squeeze; cleared only at true idle (see return-None below)
+                if dit_pressed && dah_pressed { self.squeeze_active = true; }
+
+                // New press (rising edge) → latch immediately
+                if dit_edge { self.dit_mem = true; }
+                if dah_edge { self.dah_mem = true; }
+
+                // ── During element ────────────────────────────────────────────
                 if now < self.el_end {
-                    match self.last_el {
-                        Some(true)  => { if dit_pressed { self.dit_mem = true; } }
-                        Some(false) => { if dah_pressed { self.dah_mem = true; } }
-                        None        => {}
+                    // IambicA: set opposite memory ONLY on true squeeze
+                    if dit_pressed && dah_pressed {
+                        match self.last_el {
+                            Some(true)  => { self.dit_mem = true; }
+                            Some(false) => { self.dah_mem = true; }
+                            None        => {}
+                        }
                     }
                     return PaddleEvent::None;
                 }
-                if dit_pressed { self.dit_mem = true; }
-                if dah_pressed { self.dah_mem = true; }
+
+                // ── Element complete: decide next ─────────────────────────────
+                // Single-paddle continuous only when NOT in a squeeze sequence
+                if !self.squeeze_active {
+                    if dit_pressed && !dah_pressed { self.dit_mem = true; }
+                    if dah_pressed && !dit_pressed { self.dah_mem = true; }
+                }
 
                 let send_dit = if dit_pressed && dah_pressed {
-                    match self.last_el { None => true, Some(was_dah) => was_dah }
-                } else if self.dit_mem || dit_pressed {
+                    let s = match self.last_el { None => true, Some(was_dah) => was_dah };
+                    if s { self.dit_mem = false; } else { self.dah_mem = false; }
+                    s
+                } else if self.dit_mem {
                     self.dit_mem = false; true
-                } else if self.dah_mem || dah_pressed {
+                } else if self.dah_mem {
                     self.dah_mem = false; false
                 } else {
-                    self.dit_mem = false; self.dah_mem = false;
+                    // Truly idle: clear squeeze latch so next single-paddle
+                    // sequence starts fresh (latch is NOT cleared mid-sequence
+                    // to avoid spurious extra elements from contact bounce).
+                    if !dit_pressed && !dah_pressed {
+                        self.squeeze_active = false;
+                    }
+                    self.last_el = None;
                     return PaddleEvent::None;
                 };
 
@@ -325,8 +378,27 @@ impl KeyerInput for VBandKeyer {
                 if send_dit { PaddleEvent::DitDown } else { PaddleEvent::DahDown }
             }
 
+            // ── IambicB — lenient / extended memory ───────────────────────────
+            // Sets opposite memory from a single held paddle too (classic Mode B).
+            // Holding one paddle continuously sends that element repeatedly;
+            // squeezing adds alternation.  One extra element is queued even after
+            // releasing one paddle (the "bonus element" of Mode B).
             PaddleMode::IambicB => {
+                // ── Edge / squeeze tracking ───────────────────────────────────
+                let dit_edge = dit_pressed && !self.prev_dit;
+                let dah_edge = dah_pressed && !self.prev_dah;
+                self.prev_dit = dit_pressed;
+                self.prev_dah = dah_pressed;
+
+                if dit_pressed && dah_pressed  { self.squeeze_active = true;  }
+                if !dit_pressed && !dah_pressed { self.squeeze_active = false; }
+
+                if dit_edge { self.dit_mem = true; }
+                if dah_edge { self.dah_mem = true; }
+
+                // ── During element ────────────────────────────────────────────
                 if now < self.el_end {
+                    // IambicB: lenient — set opposite from single paddle
                     match self.last_el {
                         Some(true)  => { if dit_pressed { self.dit_mem = true; } }
                         Some(false) => { if dah_pressed { self.dah_mem = true; } }
@@ -334,16 +406,22 @@ impl KeyerInput for VBandKeyer {
                     }
                     return PaddleEvent::None;
                 }
+
+                // ── Element complete: decide next ─────────────────────────────
+                // IambicB re-arms freely from held paddles
                 if dit_pressed { self.dit_mem = true; }
                 if dah_pressed { self.dah_mem = true; }
 
                 let send_dit = if dit_pressed && dah_pressed {
-                    match self.last_el { None => true, Some(was_dah) => was_dah }
-                } else if self.dit_mem || dit_pressed {
+                    let s = match self.last_el { None => true, Some(was_dah) => was_dah };
+                    if s { self.dit_mem = false; } else { self.dah_mem = false; }
+                    s
+                } else if self.dit_mem {
                     self.dit_mem = false; true
-                } else if self.dah_mem || dah_pressed {
+                } else if self.dah_mem {
                     self.dah_mem = false; false
                 } else {
+                    self.last_el = None;
                     return PaddleEvent::None;
                 };
 
