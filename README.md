@@ -155,6 +155,18 @@ ATtiny85 Pin 0 (P0)  →  RIGHT paddle (DAH)
 ATtiny85 GND         →  Paddle common ground
 ```
 
+
+### Arduino Uno (all platforms)
+
+#### Wiring
+
+```
+ATtiny85 Pin 2 (D2)  →  LEFT  paddle (DIT)
+ATtiny85 Pin 3 (D3)  →  RIGHT paddle (DAH)
+ATtiny85 GND         →  Paddle common ground
+```
+
+
 #### udev rule (Linux / Debian / Mint)
 
 Create `/etc/udev/rules.d/49-digispark.rules`:
