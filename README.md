@@ -1,3 +1,6 @@
+# WIP - the Project is new and have a lot of bugs !!!
+
+
 # cw-qso-sim
 
 A terminal-based Morse code QSO simulator and trainer — cross-platform, multi-adapter, multi-language.
