@@ -1,3 +1,5 @@
+# WIP - this Proeject has a lot bugs !
+
 # cw-qso-sim
 
 A terminal-based Morse code QSO simulator and trainer — cross-platform, multi-adapter, multi-language.
