@@ -340,5 +340,5 @@ See [VBand USB HID (Windows 11)](#vband-usb-hid-windows-11) above.
 73 de DD6DS
 
 
-! VIPE CODED !
+! VIBE CODED !
 
