@@ -52,7 +52,7 @@ cw-qso-sim --adapter keyboard
 
 
 ```
-./cw-qso-sim-x86_64-unknown-linux-gnu --adapter keyboard --style darc-cw-contest --sim-wpm 20 --user-wpm 15
+./cw-qso-sim-x86_64-unknown-linux-gnu --mycall YOUCALLSIGN --adapter keyboard --style darc-cw-contest --sim-wpm 20 --user-wpm 15
 ```
 
 
