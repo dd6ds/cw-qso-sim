@@ -44,6 +44,16 @@ cw-qso-sim
 cw-qso-sim --adapter keyboard
 ```
 
+
+## Example:  Run DARC Education Contest Train Mode
+
+
+```
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter keyboard --style darc-cw-contest
+```
+
+
+
 ---
 
 ## CLI reference
