@@ -61,13 +61,13 @@ OPTIONS:
     --sim-wpm <N>            Simulator TX speed in WPM (default: 25)
     --user-wpm <N>           Your keying / decoder speed in WPM (default: 18)
     --tone <HZ>              Sidetone frequency in Hz (default: 620)
-    --adapter <TYPE>         auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard  
+    --adapter <TYPE>         auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard
     --paddle-mode <MODE>     iambic_a | iambic_b | straight
     --switch-paddle          Swap DIT and DAH paddles
     --port <PORT>            Serial / MIDI port (ATtiny85 port name/substring)
     --midi-port <PORT>       MIDI port override for ATtiny85 (takes precedence over --port)
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
-    --style <STYLE>          ragchew | contest | dx_pileup | random
+    --style <STYLE>          ragchew | contest | dx_pileup | darc_cw_contest | random
     --lang <LANG>            en | de | fr | it
     --config <PATH>          Custom config file path
     --write-config           Write the built-in default config.toml and exit
@@ -100,12 +100,13 @@ volume         = 0.7         # 0.0 – 1.0
 sidetone       = true        # play sidetone while you key
 
 [keyer]
-adapter    = "auto"          # auto | vband | attiny85 | keyboard
+adapter    = "auto"          # auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard
 mode       = "iambic_a"      # iambic_a | iambic_b | straight
-# port     = "/dev/ttyUSB0" # not needed for VBand HID; used for ATtiny85 MIDI
+# port     = "/dev/ttyUSB0" # serial port for arduino-nano / arduino-uno (auto-detected if omitted)
+# switch_paddle = false      # true = swap DIT and DAH paddles
 
 [qso]
-style        = "ragchew"     # ragchew | contest | dx_pileup | random
+style        = "ragchew"     # ragchew | contest | dx_pileup | darc_cw_contest | random
 min_delay_ms = 800           # simulated operator reaction time (ms)
 max_delay_ms = 2500
 typo_rate    = 0.05          # probability of a simulated typo (0.0 – 1.0)
@@ -160,14 +161,81 @@ ATtiny85 GND         →  Paddle common ground
 ```
 
 
+### Arduino Nano (all platforms)
+
+The Nano runs `paddle_debug_Arduino_Nano.ino` and sends MIDI bytes over its hardware UART at 31250 baud. No USB-MIDI bridge is needed — cw-qso-sim opens the serial port directly.
+
+The adapter is selected with `--adapter arduino-nano`. The port is auto-detected by USB VID/PID; use `--port /dev/ttyUSB0` (or `--port COM3` on Windows) if auto-detection fails.
+
+#### Wiring
+
+```
+Arduino Nano D2  →  LEFT  paddle (DIT)
+Arduino Nano D3  →  RIGHT paddle (DAH)
+Arduino Nano GND →  Paddle common ground
+```
+
+#### udev rules (Linux)
+
+Most cheap Nano clones use a CH340 USB–serial chip and appear as `/dev/ttyUSB*`. Genuine Nanos with an ATmega16U2 appear as `/dev/ttyACM*`. Add yourself to the `dialout` group once and you never need `sudo`:
+
+```sh
+sudo usermod -aG dialout $USER   # re-login required
+```
+
+Or create a fine-grained udev rule. Save as `/etc/udev/rules.d/49-arduino-nano.rules`:
+
+```
+# Arduino Nano — CH340 / CH341 (most clone boards)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE:="0666"
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+# Arduino Nano — CH9102 (newer CH340-family variant)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", MODE:="0666"
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+# Arduino Nano — FT232RL
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE:="0666"
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+# Arduino Nano — genuine ATmega16U2 (new bootloader)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0043", MODE:="0666"
+KERNEL=="ttyACM*", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0043", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+# Arduino Nano — genuine ATmega16U2 (old bootloader)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0001", MODE:="0666"
+KERNEL=="ttyACM*", ATTRS{idVendor}=="2341", ATTRS{idProduct}=="0001", MODE:="0666", ENV{ID_MM_DEVICE_IGNORE}="1"
+```
+
+Then reload: `sudo udevadm control --reload-rules && sudo udevadm trigger`
+
+Quick test without re-login:
+```sh
+sudo chmod a+rw /dev/ttyUSB0   # or /dev/ttyACM0 for genuine Nanos
+```
+
+#### Programming the Arduino Nano
+
+1. Install [Arduino IDE](https://www.arduino.cc/en/software)
+2. Install the **MIDI Library** via *Sketch → Include Library → Manage Libraries* → search **MIDI Library** (by Francois Best / lathoub)
+3. Open `paddle_debug_Arduino_Nano.ino` from this repository
+4. *Tools → Board → Arduino AVR Boards → Arduino Nano*
+5. *Tools → Processor → ATmega328P* (or **ATmega328P (Old Bootloader)** for most cheap clones)
+6. *Tools → Port* → select the Nano's serial port
+7. *Sketch → Upload*
+
+The onboard LED (D13) lights up while any paddle is pressed, confirming the firmware is running.
+
+---
+
 ### Arduino Uno (all platforms)
 
 #### Wiring
 
 ```
-ATtiny85 Pin 2 (D2)  →  LEFT  paddle (DIT)
-ATtiny85 Pin 3 (D3)  →  RIGHT paddle (DAH)
-ATtiny85 GND         →  Paddle common ground
+Arduino Uno D2  →  LEFT  paddle (DIT)
+Arduino Uno D3  →  RIGHT paddle (DAH)
+Arduino Uno GND →  Paddle common ground
 ```
 
 
@@ -256,7 +324,13 @@ Add `--switch-paddle` on the CLI or set `switch_paddle = true` in `[keyer]`.
 **MIDI port not found (ATtiny85)**  
 Run `--list-ports` to see the exact port name, then set it with `--midi-port "Digispark"` or in config.
 
-**WinUSB / libwdi device not detected (Windows)**  
+**Arduino Nano / Uno not found automatically**
+Run `cw-qso-sim --list-ports` to see all detected serial ports, then supply the port explicitly: `--port /dev/ttyUSB0` (Linux) or `--port COM3` (Windows). On Linux, make sure you are in the `dialout` group (`sudo usermod -aG dialout $USER`, then re-login) or that the udev rule above is in place.
+
+**Arduino Nano on Linux shows `/dev/ttyUSB0` but permission denied**
+Either add the udev rule (see above) or run `sudo chmod a+rw /dev/ttyUSB0` as a quick workaround.
+
+**WinUSB / libwdi device not detected (Windows)**
 See [VBand USB HID (Windows 11)](#vband-usb-hid-windows-11) above.
 
 ---
