@@ -1,4 +1,4 @@
-# WIP - this Proeject has a lot bugs !
+# WIP - this Project has a lot bugs !
 
 # cw-qso-sim
 
