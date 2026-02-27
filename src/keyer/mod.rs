@@ -148,9 +148,7 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
 ///                     and forward paddle keys to the tx_key channel itself.
 ///                     Hardware adapters poll their own device → false.
 ///
-/// `windows_paddle`  — Some(arc) only when VBandWindowsKeyer is used.
-///                     The main loop must update bit0=DIT, bit4=DAH from
-///                     LCtrl/RCtrl crossterm key events.  None otherwise.
+/// `windows_paddle`  — always None; reserved for future use.
 pub fn create_keyer(
     adapter:       crate::config::AdapterType,
     port:          &str,
@@ -184,18 +182,13 @@ pub fn create_keyer(
                 };
                 if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
 
-                // On Windows: if only the keyboard HID collection is available
-                // (kbdhid.sys exclusive), raw HID reads return nothing.
-                // Use the keyboard-event shim instead — it reads LCtrl/RCtrl
-                // events injected by the main crossterm loop.
-                #[cfg(target_os = "windows")]
-                if vband::is_kbd_only_interface() {
-                    let (keyer, paddle_arc) = vband::VBandWindowsKeyer::new(
-                        mode, dot_dur, dit_mask, dah_mask,
-                    );
-                    return Ok((Box::new(keyer), false, Some(paddle_arc)));
-                }
-
+                // VBandKeyer::new_with_masks → open_device() selects the right backend:
+                //   · Non-\KBD HID path: raw hidapi reads (Linux / macOS / Windows
+                //     when a generic HID collection is exposed).
+                //   · \KBD-only on Windows: VBandDevice::WinKbd — polls
+                //     GetAsyncKeyState(VK_LCONTROL / VK_RCONTROL) directly.
+                //     This works without requiring crossterm keyboard focus and
+                //     was confirmed by vband-debug Phase 4 (54 events captured).
                 Ok((Box::new(vband::VBandKeyer::new_with_masks(mode, dot_dur, dit_mask, dah_mask)?), false, None))
             }
             #[cfg(not(feature = "keyer-vband"))]
