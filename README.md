@@ -232,11 +232,8 @@ cargo build
 # Release build
 cargo build --release
 
-# Windows (cross-compile from Linux)
-./build-cross.sh
-
 # All targets
-./cross/build-all.sh
+./build-all.sh
 ```
 
 ### Cargo features
