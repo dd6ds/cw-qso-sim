@@ -311,6 +311,19 @@ cargo build --release
 | `keyer-attiny85` | ✓ | ATtiny85/Digispark MIDI paddle support |
 | `tui` | ✓ | Ratatui terminal UI |
 
+
+
+## Winkeyer
+
+´´´
+# Linux
+./cw-qso-sim-aarch64-unknown-linux-gnu --adapter win-keyer --port /dev/ttyUSB0 --style darc_cw_contest
+
+# Windows:
+cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter win-keyer --port COM3 --style darc_cw_contest
+´´´
+
+
 ---
 
 ## Troubleshooting
