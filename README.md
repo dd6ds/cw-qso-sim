@@ -178,6 +178,11 @@ ESP32 GND           →  Paddle common ground
 
 ### ESP32 (all platforms)
 
+Tools -> Board -> Boardmanager -> Search esp32 Espressif -> Install
+
+Select: ESP32 DEV
+Upload Speed 115200
+
 #### Wiring
 
 ```
