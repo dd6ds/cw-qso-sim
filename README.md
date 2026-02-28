@@ -382,13 +382,13 @@ cargo build --release
 
 ## Winkeyer
 
-´´´
+'''
 # Linux
 ./cw-qso-sim-aarch64-unknown-linux-gnu --adapter win-keyer --port /dev/ttyUSB0 --style darc_cw_contest
 
 # Windows:
 cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter win-keyer --port COM3 --style darc_cw_contest
-´´´
+'''
 
 
 ---
