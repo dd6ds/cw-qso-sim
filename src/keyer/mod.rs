@@ -6,6 +6,8 @@ pub mod vband;
 pub mod attiny85;
 #[cfg(feature = "keyer-nano")]
 pub mod nano;
+#[cfg(feature = "keyer-winkeyer")]
+pub mod winkeyer;
 
 use crate::morse::decoder::PaddleEvent;
 use anyhow::Result;
@@ -36,6 +38,14 @@ pub fn list_ports() -> Vec<String> {
     #[cfg(feature = "keyer-nano")]
     {
         let mut s = nano::list_nano_ports();
+        out.append(&mut s);
+    }
+    // WinKeyer shows up as a plain serial port — the nano list already covers
+    // all serial ports, so we just print a reminder here when no other adapters
+    // are found.
+    #[cfg(all(feature = "keyer-winkeyer", not(feature = "keyer-nano")))]
+    {
+        let mut s = winkeyer::list_winkeyer_ports();
         out.append(&mut s);
     }
     if out.is_empty() {
@@ -213,7 +223,7 @@ pub fn create_keyer(
             #[cfg(feature = "keyer-nano")]
             {
                 if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
-                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, port, switch_paddle)?), false, None))
+                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, port, switch_paddle, nano::BAUD_MIDI)?), false, None))
             }
             #[cfg(not(feature = "keyer-nano"))]
             {
@@ -225,21 +235,73 @@ pub fn create_keyer(
             #[cfg(feature = "keyer-nano")]
             {
                 if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
-                // Uno uses the same serial-MIDI protocol as the Nano.
-                // Pass port as-is; NanoKeyer::new will autodetect via UNO VID/PIDs
-                // if port is empty (autodetect_uno_port already ran above in Auto path,
-                // but when --adapter arduino-uno is explicit we re-resolve here).
                 let resolved_port = if port.is_empty() {
-                    nano::autodetect_uno_port()
-                        .unwrap_or_default()
+                    nano::autodetect_uno_port().unwrap_or_default()
                 } else {
                     port.to_string()
                 };
-                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, &resolved_port, switch_paddle)?), false, None))
+                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, &resolved_port, switch_paddle, nano::BAUD_MIDI)?), false, None))
             }
             #[cfg(not(feature = "keyer-nano"))]
             {
                 log::warn!("adapter = \"arduino_uno\" but this build has no Nano/Uno support — falling back to keyboard text-input");
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
+            }
+        }
+        AdapterType::Esp32 => {
+            #[cfg(feature = "keyer-nano")]
+            {
+                if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
+                // ESP32 uses the same MIDI byte format (Note 60/62) but at 115200 baud.
+                // 31250 baud is unreliable on Linux with CP2102/CH340 USB chips.
+                if port.is_empty() {
+                    return Err(anyhow::anyhow!(
+                        "ESP32 adapter requires an explicit serial port.\n  \
+                         Pass it with  --port /dev/ttyUSB0  (Linux/macOS)\n  \
+                                       --port COM3          (Windows)\n  \
+                         Run `cw-qso-sim --list-ports` to list all available ports."
+                    ));
+                }
+                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, port, switch_paddle, nano::BAUD_ESP32)?), false, None))
+            }
+            #[cfg(not(feature = "keyer-nano"))]
+            {
+                log::warn!("adapter = \"esp32\" but this build has no serial-MIDI support — falling back to keyboard text-input");
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
+            }
+        }
+        AdapterType::Esp8266 => {
+            #[cfg(feature = "keyer-nano")]
+            {
+                if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
+                // ESP8266 (NodeMCU / Wemos D1 Mini) uses identical MIDI byte format
+                // at 115200 baud — same as ESP32.
+                if port.is_empty() {
+                    return Err(anyhow::anyhow!(
+                        "ESP8266 adapter requires an explicit serial port.\n  \
+                         Pass it with  --port /dev/ttyUSB0  (Linux/macOS)\n  \
+                                       --port COM3          (Windows)\n  \
+                         Run `cw-qso-sim --list-ports` to list all available ports."
+                    ));
+                }
+                Ok((Box::new(nano::NanoKeyer::new(mode, dot_dur, port, switch_paddle, nano::BAUD_ESP32)?), false, None))
+            }
+            #[cfg(not(feature = "keyer-nano"))]
+            {
+                log::warn!("adapter = \"esp8266\" but this build has no serial-MIDI support — falling back to keyboard text-input");
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
+            }
+        }
+        AdapterType::WinKeyer => {
+            #[cfg(feature = "keyer-winkeyer")]
+            {
+                // WinKeyer handles paddle swap internally via the mode byte —
+                // no need to log separately; winkeyer.rs logs it during init.
+                Ok((Box::new(winkeyer::WinKeyerKeyer::new(port, dot_dur, mode, switch_paddle)?), false, None))
+            }
+            #[cfg(not(feature = "keyer-winkeyer"))]
+            {
+                log::warn!("adapter = \"win_keyer\" but this build has no WinKeyer support — falling back to keyboard text-input");
                 Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
             }
         }

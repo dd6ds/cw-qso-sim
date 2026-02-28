@@ -92,9 +92,39 @@ fn main() -> Result<()> {
                 #[cfg(not(feature = "keyer-attiny85"))]
                 { println!("keyer-attiny85 feature not compiled in."); false }
             }
+            config::AdapterType::ArduinoNano => {
+                #[cfg(feature = "keyer-nano")]
+                { keyer::nano::check_adapter(port, "Arduino Nano (serial MIDI)", keyer::nano::BAUD_MIDI, timeout)? }
+                #[cfg(not(feature = "keyer-nano"))]
+                { println!("keyer-nano feature not compiled in."); false }
+            }
+            config::AdapterType::ArduinoUno => {
+                #[cfg(feature = "keyer-nano")]
+                { keyer::nano::check_adapter(port, "Arduino Uno (serial MIDI)", keyer::nano::BAUD_MIDI, timeout)? }
+                #[cfg(not(feature = "keyer-nano"))]
+                { println!("keyer-nano feature not compiled in."); false }
+            }
+            config::AdapterType::Esp32 => {
+                #[cfg(feature = "keyer-nano")]
+                { keyer::nano::check_adapter(port, "ESP32 (serial MIDI @ 115200)", keyer::nano::BAUD_ESP32, timeout)? }
+                #[cfg(not(feature = "keyer-nano"))]
+                { println!("keyer-nano feature not compiled in."); false }
+            }
+            config::AdapterType::Esp8266 => {
+                #[cfg(feature = "keyer-nano")]
+                { keyer::nano::check_adapter(port, "ESP8266 NodeMCU/Wemos (serial MIDI @ 115200)", keyer::nano::BAUD_ESP32, timeout)? }
+                #[cfg(not(feature = "keyer-nano"))]
+                { println!("keyer-nano feature not compiled in."); false }
+            }
+            config::AdapterType::WinKeyer => {
+                #[cfg(feature = "keyer-winkeyer")]
+                { keyer::winkeyer::check_adapter(port, timeout)? }
+                #[cfg(not(feature = "keyer-winkeyer"))]
+                { println!("keyer-winkeyer feature not compiled in."); false }
+            }
             _ => {
                 println!("No hardware adapter selected or detected.");
-                println!("Use --adapter vband or --adapter attiny85");
+                println!("Supported: --adapter vband | attiny85 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer");
                 false
             }
         };

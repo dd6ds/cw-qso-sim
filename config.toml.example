@@ -26,17 +26,27 @@ volume     = 0.7
 sidetone   = true
 
 [keyer]
-# Adapter type: "auto" | "vband" | "attiny85" | "keyboard"
-# "auto" detects hardware and falls back to keyboard text-input if none found.
-# On Windows builds without hardware support, "auto" always uses keyboard.
+# Adapter type:
+#   "auto"         — auto-detect hardware, fall back to keyboard if none found
+#   "vband"        — VBand USB HID paddle (Linux/macOS)
+#   "attiny85"     — ATtiny85 Digispark MIDI paddle
+#   "arduino_nano" — Arduino Nano serial-MIDI paddle (31250 baud)
+#   "arduino_uno"  — Arduino Uno serial-MIDI paddle (31250 baud)
+#   "esp32"        — ESP32 DevKit serial-MIDI paddle (115200 baud) — also set port below
+#   "esp8266"      — ESP8266 NodeMCU / Wemos D1 Mini (115200 baud) — also set port below
+#   "winkeyer"     — K1EL WinKeyer USB/Serial (WK2/WK3) — also set port below
+#   "keyboard"     — type callsigns on the keyboard (no physical paddle needed)
 adapter    = "auto"
 # Paddle mode: "iambic_a" | "iambic_b" | "straight"
 mode       = "iambic_a"
-# Serial port — not used for VBand HID; kept for future serial adapters
+# Serial port for Arduino Nano/Uno, ESP32, ESP8266 or WinKeyer adapters.
+# Linux:   /dev/ttyUSB0  or  /dev/ttyACM0
+# macOS:   /dev/cu.usbserial-*
+# Windows: COM3  (check Device Manager)
 # port     = "/dev/ttyUSB0"
 
 [qso]
-# QSO style: "ragchew" | "contest" | "dx_pileup" | "random"
+# QSO style: "ragchew" | "contest" | "dx_pileup" | "darc_cw_contest" | "random"
 style        = "ragchew"
 # Simulated operator reaction delay range (milliseconds)
 min_delay_ms = 800

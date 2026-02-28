@@ -40,15 +40,15 @@ pub struct Cli {
     #[arg(long)]
     pub who_starts: Option<WhoStarts>,
 
-    /// QSO style: ragchew | contest | dx_pileup | random
+    /// QSO style: ragchew | contest | dx_pileup | darc_cw_contest | random
     #[arg(long)]
     pub style: Option<QsoStyle>,
 
-    /// Keyer adapter: auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard
+    /// Keyer adapter: auto | vband | attiny85 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer | keyboard
     #[arg(long)]
     pub adapter: Option<AdapterType>,
 
-    /// Port (unused for VBand HID; MIDI port name/substring for ATtiny85)
+    /// Serial port for arduino-nano, arduino-uno, esp32, esp8266 or winkeyer (e.g. /dev/ttyUSB0, COM3)
     #[arg(long)]
     pub port: Option<String>,
 
@@ -112,6 +112,18 @@ pub enum AdapterType {
     /// Arduino Uno serial-MIDI paddle (31250 baud; autodetects ATmega16U2/CH340)
     #[cfg_attr(not(feature = "keyer-nano"), value(skip))]
     ArduinoUno,
+    /// ESP32 serial-MIDI paddle (115200 baud; requires --port <device>)
+    #[cfg_attr(not(feature = "keyer-nano"), value(skip))]
+    #[value(name = "esp32")]
+    Esp32,
+    /// ESP8266 serial-MIDI paddle (115200 baud; NodeMCU / Wemos D1 Mini — requires --port <device>)
+    #[cfg_attr(not(feature = "keyer-nano"), value(skip))]
+    #[value(name = "esp8266")]
+    Esp8266,
+    /// K1EL WinKeyer USB/Serial (WK2/WK3) — requires --port <device>
+    #[cfg_attr(not(feature = "keyer-winkeyer"), value(skip))]
+    #[value(name = "winkeyer")]
+    WinKeyer,
     /// Keyboard text-input mode (type callsigns, Space=word, Enter=over)
     Keyboard,
     /// Hidden — text-mode input (legacy alias for keyboard)

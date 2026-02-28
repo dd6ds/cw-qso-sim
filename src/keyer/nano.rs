@@ -26,9 +26,13 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::thread;
 
-const BAUD_RATE: u32 = 31_250;
-const NOTE_DIT:  u8  = 60;   // Middle C
-const NOTE_DAH:  u8  = 62;   // D
+/// Standard MIDI baud rate — Arduino Nano and Uno
+pub const BAUD_MIDI:  u32 = 31_250;
+/// Standard serial baud rate — ESP32 (31250 is unreliable on Linux with CP2102/CH340)
+pub const BAUD_ESP32: u32 = 115_200;
+
+const NOTE_DIT: u8 = 60;   // Middle C
+const NOTE_DAH: u8 = 62;   // D
 
 /// USB VID/PID pairs for common Arduino Nano USB chips.
 /// Used for autodetect when --port is not given.
@@ -138,12 +142,14 @@ pub struct NanoKeyer {
 }
 
 impl NanoKeyer {
-    /// Open `port_path` (e.g. "/dev/ttyUSB0" or "COM3") at 31250 baud.
+    /// Open `port_path` (e.g. "/dev/ttyUSB0" or "COM3") at `baud_rate`.
+    /// Use `BAUD_MIDI` (31250) for Arduino Nano/Uno, `BAUD_ESP32` (115200) for ESP32.
     pub fn new(
         mode:          crate::config::PaddleMode,
         dot_dur:       Duration,
         port_path:     &str,
         switch_paddle: bool,
+        baud_rate:     u32,
     ) -> Result<Self> {
         // If no port given, try to find one by USB VID/PID
         let resolved = if port_path.is_empty() {
@@ -158,17 +164,17 @@ impl NanoKeyer {
             port_path.to_string()
         };
 
-        let port: Box<dyn SerialPort> = serialport::new(&resolved, BAUD_RATE)
+        let port: Box<dyn SerialPort> = serialport::new(&resolved, baud_rate)
             .timeout(Duration::from_millis(50))
             .open()
             .map_err(|e| anyhow!(
                 "Cannot open serial port '{}': {e}\n  \
-                 Check that the Nano is plugged in and you have read/write permission.\n  \
+                 Check that the device is plugged in and you have read/write permission.\n  \
                  Linux: sudo usermod -aG dialout $USER  (then re-login)",
                 resolved
             ))?;
 
-        log::info!("[nano] Opened {} at {} baud", resolved, BAUD_RATE);
+        log::info!("[nano] Opened {} at {} baud", resolved, baud_rate);
 
         let state     = Arc::new(Mutex::new(PaddleState::default()));
         let state_cb  = Arc::clone(&state);
@@ -283,6 +289,88 @@ pub fn list_nano_ports() -> Vec<String> {
             format!("Serial [Nano?] {}  ({})", p.port_name, detail)
         }).collect(),
         Err(e) => vec![format!("Serial port enumeration failed: {e}")],
+    }
+}
+
+// ── Interactive adapter check (--check-adapter) ───────────────────────────────
+
+/// Open `port_path`, wait for DIT then DAH within `timeout`.
+/// Works for Arduino Nano, Arduino Uno, and ESP32 — all speak the same protocol.
+/// Returns Ok(true) if both paddles produce the expected events.
+pub fn check_adapter(port_path: &str, label: &str, baud_rate: u32, timeout: Duration) -> Result<bool> {
+    use crate::config::PaddleMode;
+    use crate::morse::decoder::PaddleEvent;
+
+    let mut keyer = NanoKeyer::new(
+        PaddleMode::IambicA,
+        Duration::from_millis(60),
+        port_path,
+        false,
+        baud_rate,
+    )?;
+
+    println!("Adapter : {label}");
+    println!("Port    : {port_path}");
+    println!("Protocol: MIDI NoteOn/Off  DIT=note {NOTE_DIT}  DAH=note {NOTE_DAH}  @ {baud_rate} baud");
+    println!();
+
+    let mut dit_ok = false;
+    let mut dah_ok = false;
+
+    // ── Step 1: DIT ──────────────────────────────────────────────────────────
+    println!("[ 1/2 ]  Press DIT paddle now …");
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        match keyer.poll() {
+            PaddleEvent::DitDown => {
+                println!("         ✓ DIT received");
+                dit_ok = true;
+                break;
+            }
+            PaddleEvent::DahDown => {
+                println!("         ✗ Got DAH instead of DIT — try --switch-paddle");
+            }
+            _ => {}
+        }
+        thread::sleep(Duration::from_millis(2));
+    }
+    if !dit_ok { println!("         ✗ DIT timeout — no DIT event received"); }
+
+    // Reset FSM between steps
+    keyer.dit_mem       = false;
+    keyer.dah_mem       = false;
+    keyer.last_el       = None;
+    keyer.el_end        = Instant::now();
+    keyer.prev_dit      = false;
+    keyer.prev_dah      = false;
+    keyer.squeeze_active = false;
+
+    // ── Step 2: DAH ──────────────────────────────────────────────────────────
+    println!("[ 2/2 ]  Press DAH paddle now …");
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        match keyer.poll() {
+            PaddleEvent::DahDown => {
+                println!("         ✓ DAH received");
+                dah_ok = true;
+                break;
+            }
+            PaddleEvent::DitDown => {
+                println!("         ✗ Got DIT instead of DAH — try --switch-paddle");
+            }
+            _ => {}
+        }
+        thread::sleep(Duration::from_millis(2));
+    }
+    if !dah_ok { println!("         ✗ DAH timeout — no DAH event received"); }
+
+    println!();
+    if dit_ok && dah_ok {
+        println!("✓  Both paddles OK — adapter is working correctly.");
+        Ok(true)
+    } else {
+        println!("✗  Adapter check failed.");
+        Ok(false)
     }
 }
 

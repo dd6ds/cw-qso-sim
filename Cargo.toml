@@ -10,15 +10,18 @@ name = "cw-qso-sim"
 path = "src/main.rs"
 
 [features]
-default     = ["audio-cpal", "keyer-vband", "keyer-attiny85", "keyer-nano", "tui"]
+default     = ["audio-cpal", "keyer-vband", "keyer-attiny85", "keyer-nano", "keyer-winkeyer", "tui"]
 audio-cpal  = ["dep:cpal"]
 keyer-vband = ["dep:hidapi"]
 # keyer-vband-winusb: WinUSB/libwdi fallback for Windows.
 # Enable when the VBand adapter has a WinUSB driver installed (e.g. via Zadig).
 # Requires libusb (vendored via cmake); included automatically in Windows builds.
 keyer-vband-winusb = ["keyer-vband", "dep:rusb"]
-keyer-attiny85 = ["dep:midir"]
-keyer-nano     = ["dep:serialport"]
+keyer-attiny85  = ["dep:midir"]
+keyer-nano      = ["dep:serialport"]
+# K1EL WinKeyer USB/Serial adapter (WK2/WK3).
+# Uses the same serialport crate as keyer-nano (1200 baud, 8N2).
+keyer-winkeyer  = ["dep:serialport"]
 tui         = ["dep:ratatui", "dep:crossterm"]
 
 [dependencies]

@@ -19,12 +19,15 @@
 #   toolchain is used directly via plain `cargo`.
 #
 # Features per target:
-#   Linux x86_64    : full  (audio-cpal + keyer-vband + keyer-attiny85 + tui)
-#   Linux aarch64   : full  (audio-cpal + keyer-vband + keyer-attiny85 + tui)
-#   Linux armv7     : full  (audio-cpal + keyer-vband + keyer-attiny85 + tui)
-#   macOS x86_64    : full  (audio-cpal + keyer-vband + keyer-attiny85 + tui)
-#   macOS aarch64   : full  (audio-cpal + keyer-vband + keyer-attiny85 + tui)
-#   Windows GNU     : full  (audio-cpal + keyer-vband + keyer-attiny85 + tui)
+#   Linux x86_64    : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-nano + keyer-winkeyer + tui)
+#   Linux aarch64   : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-nano + keyer-winkeyer + tui)
+#   Linux armv7     : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-nano + keyer-winkeyer + tui)
+#   macOS x86_64    : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-nano + keyer-winkeyer + tui)
+#   macOS aarch64   : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-nano + keyer-winkeyer + tui)
+#   Windows GNU     : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-nano + keyer-winkeyer + tui)
+#
+# keyer-nano     — Arduino Nano / Uno / ESP32 / ESP8266 serial-MIDI paddles (serialport crate)
+# keyer-winkeyer — K1EL WinKeyer USB/Serial WK2/WK3 (1200 baud, serialport crate)
 #
 # Why --target-dir per cross target?
 #   cross runs build-scripts (serde, parking_lot_core …) inside its Docker
@@ -129,7 +132,7 @@ find_macos_sdk() {
 build() {
     local target="$1"
     local ext="${2:-}"        # ".exe" for Windows, empty otherwise
-    local features="${3:-audio-cpal,keyer-vband,tui}"
+    local features="${3:-audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui}"
 
     local tgt_dir
     if [[ "$target" == "$HOST_TRIPLE" ]]; then
@@ -170,7 +173,7 @@ build() {
 #   BINDGEN_EXTRA_CLANG_ARGS — passes -isysroot into bindgen's libclang
 build_mac() {
     local target="$1"
-    local features="${2:-audio-cpal,keyer-vband,keyer-attiny85,tui}"
+    local features="${2:-audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui}"
     local tgt_dir="target-${target}"
 
     echo ""
@@ -243,25 +246,31 @@ WRAPPER
 echo "Starting cross-compile for cw-qso-sim …"
 
 # Linux x86_64 — full features (native build when host is x86_64 Linux)
-build "x86_64-unknown-linux-gnu" "" "audio-cpal,keyer-vband,keyer-attiny85,tui"
+build "x86_64-unknown-linux-gnu" "" \
+    "audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui"
 
 # Linux ARM64
-build "aarch64-unknown-linux-gnu" "" "audio-cpal,keyer-vband,keyer-attiny85,tui"
+build "aarch64-unknown-linux-gnu" "" \
+    "audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui"
 
 # Linux ARMv7 — uncomment if needed
-#build "armv7-unknown-linux-gnueabihf" "" "audio-cpal,keyer-vband,keyer-attiny85,tui"
+#build "armv7-unknown-linux-gnueabihf" "" \
+#    "audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui"
 
 # macOS x86_64 (Intel)
-build_mac "x86_64-apple-darwin"
+build_mac "x86_64-apple-darwin" \
+    "audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui"
 
 # macOS aarch64 (Apple Silicon)
-build_mac "aarch64-apple-darwin"
+build_mac "aarch64-apple-darwin" \
+    "audio-cpal,keyer-vband,keyer-attiny85,keyer-nano,keyer-winkeyer,tui"
 
 # Windows x86_64 — full features.
 # keyer-vband-winusb adds a WinUSB/rusb fallback for devices where a libwdi
 # driver (e.g. installed via Zadig) has replaced the native HidUsb driver.
 # Requires cmake in the cross container for the vendored libusb build.
-build "x86_64-pc-windows-gnu" ".exe" "audio-cpal,keyer-vband,keyer-vband-winusb,keyer-attiny85,tui"
+build "x86_64-pc-windows-gnu" ".exe" \
+    "audio-cpal,keyer-vband,keyer-vband-winusb,keyer-attiny85,keyer-nano,keyer-winkeyer,tui"
 
 echo ""
 echo "══════════════════════════════════════════════"

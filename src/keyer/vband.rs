@@ -37,6 +37,8 @@ use crate::morse::decoder::PaddleEvent;
 use super::KeyerInput;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+#[cfg(target_os = "macos")]
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 pub const VBAND_VID: u16 = 0x413d;
@@ -79,6 +81,289 @@ const VK_LCONTROL: i32 = 0xA2;   // maps to DIT_MASK 0x01
 #[cfg(target_os = "windows")]
 const VK_RCONTROL: i32 = 0xA3;   // maps to DAH_MASK 0x10
 
+// ── macOS IOKit IOHIDManager seize backend ────────────────────────────────────
+//
+// On macOS 14+ (Sonoma / Sequoia) the kernel's IOHIDDriver holds keyboard-class
+// HID devices (UsagePage:0001 Usage:0006) with kIOHIDDriverExclusive.  hidapi's
+// IOHIDDeviceOpen(kIOHIDOptionsTypeNone) is rejected with kIOReturnNotPrivileged
+// (0xE00002C1) even when Input Monitoring TCC permission is GRANTED.
+//
+// Fix: use IOHIDManagerOpen with kIOHIDOptionsTypeSeizeDevice (0x01).  This
+// takes the device from IOHIDDriver, allowing us to receive raw HID reports via
+// an IOHIDReportCallback on a private CFRunLoop thread.
+//
+// The seize is released automatically when we close the manager on Drop.
+// While seized, the VBand will NOT generate OS-level LCtrl/RCtrl key events —
+// we read the raw HID modifier byte directly, which is exactly what we need.
+//
+// Requirements:
+//   • Input Monitoring (TCC) permission must be GRANTED for the calling process.
+//   • The VBand must be enumerable (visible in HID device list).
+
+#[cfg(target_os = "macos")]
+mod mac_iohid {
+    use std::ffi::{c_void, CString};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+    use std::sync::mpsc;
+
+    // ── Opaque CoreFoundation / IOKit handle types ────────────────────────
+    type CFTypeRef        = *mut c_void;
+    type CFStringRef      = *mut c_void;
+    type CFNumberRef      = *mut c_void;
+    type CFDictionaryRef  = *mut c_void;
+    type CFRunLoopRef     = *mut c_void;
+    type CFIndex          = isize;
+    type CFTimeInterval   = f64;
+    type CFStringEncoding = u32;
+    type IOReturn         = i32;
+    type IOOptionBits     = u32;
+    type IOHIDManagerRef  = *mut c_void;
+
+    const K_IO_RETURN_SUCCESS:         IOReturn         = 0;
+    const K_IO_HID_OPTIONS_NONE:       IOOptionBits     = 0x00;
+    const K_IO_HID_OPTIONS_SEIZE:      IOOptionBits     = 0x01;
+    const K_CF_STRING_ENCODING_UTF8:   CFStringEncoding = 0x0800_0100;
+    const K_CF_NUMBER_INT_TYPE:        i64              = 9; // kCFNumberIntType
+
+    // Signature for IOHIDManager input-report callback
+    type ReportCb = unsafe extern "C" fn(
+        context:       *mut c_void,
+        result:        IOReturn,
+        sender:        *mut c_void,
+        report_type:   u32,
+        report_id:     u32,
+        report:        *const u8,
+        report_length: CFIndex,
+    );
+
+    #[link(name = "IOKit",          kind = "framework")]
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn IOHIDManagerCreate(
+            allocator: CFTypeRef,
+            options:   IOOptionBits,
+        ) -> IOHIDManagerRef;
+
+        fn IOHIDManagerSetDeviceMatching(
+            manager:  IOHIDManagerRef,
+            matching: CFDictionaryRef,
+        );
+
+        fn IOHIDManagerRegisterInputReportCallback(
+            manager:  IOHIDManagerRef,
+            callback: ReportCb,
+            context:  *mut c_void,
+        );
+
+        fn IOHIDManagerScheduleWithRunLoop(
+            manager:       IOHIDManagerRef,
+            run_loop:      CFRunLoopRef,
+            run_loop_mode: CFStringRef,
+        );
+
+        fn IOHIDManagerOpen(
+            manager: IOHIDManagerRef,
+            options: IOOptionBits,
+        ) -> IOReturn;
+
+        fn IOHIDManagerClose(
+            manager: IOHIDManagerRef,
+            options: IOOptionBits,
+        ) -> IOReturn;
+
+        fn CFRunLoopGetCurrent() -> CFRunLoopRef;
+
+        fn CFRunLoopRunInMode(
+            mode:                        CFStringRef,
+            seconds:                     CFTimeInterval,
+            return_after_source_handled: u8,
+        ) -> i32;
+
+        fn CFStringCreateWithCString(
+            alloc:    CFTypeRef,
+            c_str:    *const i8,
+            encoding: CFStringEncoding,
+        ) -> CFStringRef;
+
+        fn CFNumberCreate(
+            allocator: CFTypeRef,
+            the_type:  i64,
+            value_ptr: *const c_void,
+        ) -> CFNumberRef;
+
+        fn CFDictionaryCreate(
+            allocator:       CFTypeRef,
+            keys:            *const CFTypeRef,
+            values:          *const CFTypeRef,
+            num_values:      CFIndex,
+            key_callbacks:   *const c_void,
+            value_callbacks: *const c_void,
+        ) -> CFDictionaryRef;
+
+        fn CFRelease(cf: CFTypeRef);
+
+        // CoreFoundation exported constants
+        static kCFRunLoopDefaultMode:            CFStringRef;
+        static kCFTypeDictionaryKeyCallBacks:    c_void;
+        static kCFTypeDictionaryValueCallBacks:  c_void;
+    }
+
+    // ── Shared state ──────────────────────────────────────────────────────
+
+    /// State shared between the IOHIDManager run-loop thread and the polling thread.
+    pub struct MacCtx {
+        /// Latest paddle bitmask from HID reports (DIT_MASK=0x01 | DAH_MASK=0x10).
+        pub raw_mask: AtomicU8,
+        /// Set to `true` by `Drop` to signal the run-loop thread to exit.
+        pub stop:     AtomicBool,
+    }
+
+    // ── Report callback ───────────────────────────────────────────────────
+
+    /// IOHIDManager input-report callback — runs on the background CFRunLoop thread.
+    ///
+    /// Extracts the paddle bitmask from the report and stores it in `MacCtx::raw_mask`.
+    /// Byte selection follows the same logic as the HidApi backend:
+    ///   buf[0] != 0  → use buf[0]  (Linux/macOS raw layout)
+    ///   buf[0] == 0  → use buf[1]  (Windows report-ID prepend fallback, unlikely here)
+    unsafe extern "C" fn report_cb(
+        context:       *mut c_void,
+        _result:       IOReturn,
+        _sender:       *mut c_void,
+        _report_type:  u32,
+        _report_id:    u32,
+        report:        *const u8,
+        report_length: CFIndex,
+    ) {
+        if context.is_null() || report.is_null() || report_length < 1 { return; }
+        let ctx  = &*(context as *const MacCtx);
+        let b0   = *report.add(0);
+        let b1   = if report_length >= 2 { *report.add(1) } else { 0 };
+        let mask = if b0 != 0 { b0 } else { b1 };
+        ctx.raw_mask.store(mask, Ordering::Relaxed);
+        log::debug!(
+            "[vband/mackbd] report len={report_length} \
+             b0=0x{b0:02X} b1=0x{b1:02X} → mask=0x{mask:02X}"
+        );
+    }
+
+    // ── Thread body ───────────────────────────────────────────────────────
+
+    /// Core of the background thread: creates the IOHIDManager, opens it with
+    /// kIOHIDOptionsTypeSeizeDevice, registers `report_cb`, and runs the CFRunLoop.
+    ///
+    /// SAFETY: all IOKit/CoreFoundation calls are on the same thread that owns
+    /// the run loop.  The `ctx` Arc pointer passed to `report_cb` remains valid
+    /// for the entire lifetime of the run loop (the Arc refcount is >= 1 because
+    /// this thread holds a clone).
+    unsafe fn run_loop_thread(
+        vid: u16,
+        pid: u16,
+        ctx: Arc<MacCtx>,
+        tx:  mpsc::Sender<anyhow::Result<()>>,
+    ) {
+        // 1. Create manager
+        let mgr = IOHIDManagerCreate(std::ptr::null_mut(), K_IO_HID_OPTIONS_NONE);
+        if mgr.is_null() {
+            let _ = tx.send(Err(anyhow::anyhow!("IOHIDManagerCreate returned NULL")));
+            return;
+        }
+
+        // 2. Build matching dict { "VendorID": vid, "ProductID": pid }
+        let k_vid = CString::new("VendorID").unwrap();
+        let k_pid = CString::new("ProductID").unwrap();
+        let cf_kv = CFStringCreateWithCString(std::ptr::null_mut(), k_vid.as_ptr(), K_CF_STRING_ENCODING_UTF8);
+        let cf_kp = CFStringCreateWithCString(std::ptr::null_mut(), k_pid.as_ptr(), K_CF_STRING_ENCODING_UTF8);
+        let v_vid = vid as i32;
+        let v_pid = pid as i32;
+        let cf_vv = CFNumberCreate(std::ptr::null_mut(), K_CF_NUMBER_INT_TYPE, &v_vid as *const i32 as *const c_void);
+        let cf_vp = CFNumberCreate(std::ptr::null_mut(), K_CF_NUMBER_INT_TYPE, &v_pid as *const i32 as *const c_void);
+        let keys: [CFTypeRef; 2] = [cf_kv as _, cf_kp as _];
+        let vals: [CFTypeRef; 2] = [cf_vv as _, cf_vp as _];
+        let dict = CFDictionaryCreate(
+            std::ptr::null_mut(),
+            keys.as_ptr(),
+            vals.as_ptr(),
+            2,
+            &kCFTypeDictionaryKeyCallBacks   as *const c_void,
+            &kCFTypeDictionaryValueCallBacks as *const c_void,
+        );
+        IOHIDManagerSetDeviceMatching(mgr, dict);
+        CFRelease(dict as CFTypeRef);
+        CFRelease(cf_kv as CFTypeRef);
+        CFRelease(cf_kp as CFTypeRef);
+        CFRelease(cf_vv as CFTypeRef);
+        CFRelease(cf_vp as CFTypeRef);
+
+        // 3. Register callback; pass raw pointer to shared ctx
+        //    Safety: Arc keeps the data alive as long as the thread runs.
+        let ctx_ptr = Arc::as_ptr(&ctx) as *mut c_void;
+        IOHIDManagerRegisterInputReportCallback(mgr, report_cb, ctx_ptr);
+
+        // 4. Schedule with this thread's run loop
+        let rl   = CFRunLoopGetCurrent();
+        let mode = kCFRunLoopDefaultMode;
+        IOHIDManagerScheduleWithRunLoop(mgr, rl, mode);
+
+        // 5. Open with seize — takes the device from IOHIDDriver
+        let ret = IOHIDManagerOpen(mgr, K_IO_HID_OPTIONS_SEIZE);
+        if ret != K_IO_RETURN_SUCCESS {
+            let _ = tx.send(Err(anyhow::anyhow!(
+                "IOHIDManagerOpen(kIOHIDOptionsTypeSeizeDevice) → 0x{ret:08X}"
+            )));
+            IOHIDManagerClose(mgr, K_IO_HID_OPTIONS_NONE);
+            CFRelease(mgr as CFTypeRef);
+            return;
+        }
+
+        log::info!(
+            "[vband/mackbd] IOHIDManager opened with kIOHIDOptionsTypeSeizeDevice \
+             — VBand {:04x}:{:04x} seized from IOHIDDriver",
+            vid, pid
+        );
+        let _ = tx.send(Ok(()));
+
+        // 6. Drive the run loop in 10 ms slices, stopping when requested
+        loop {
+            if ctx.stop.load(Ordering::Relaxed) { break; }
+            CFRunLoopRunInMode(mode, 0.010, 0);
+        }
+
+        IOHIDManagerClose(mgr, K_IO_HID_OPTIONS_NONE);
+        CFRelease(mgr as CFTypeRef);
+        log::debug!("[vband/mackbd] run-loop thread exiting");
+    }
+
+    // ── Public entry point ────────────────────────────────────────────────
+
+    /// Spawn the IOHIDManager seize thread for the given VID:PID.
+    ///
+    /// Blocks until the manager is open (or returns `Err` if open failed).
+    pub fn spawn(
+        vid: u16,
+        pid: u16,
+    ) -> anyhow::Result<(Arc<MacCtx>, std::thread::JoinHandle<()>)> {
+        let ctx  = Arc::new(MacCtx {
+            raw_mask: AtomicU8::new(0),
+            stop:     AtomicBool::new(false),
+        });
+        let ctx2 = Arc::clone(&ctx);
+
+        let (tx, rx) = mpsc::channel::<anyhow::Result<()>>();
+
+        let thread = std::thread::Builder::new()
+            .name("vband-mackbd".into())
+            .spawn(move || unsafe { run_loop_thread(vid, pid, ctx2, tx) })?;
+
+        // Block until the background thread signals open success or failure
+        rx.recv()
+            .map_err(|_| anyhow::anyhow!("[vband/mackbd] thread died before signalling"))??;
+
+        Ok((ctx, thread))
+    }
+}
+
 // ── Device backend ────────────────────────────────────────────────────────────
 
 /// Abstraction over the USB access backends.
@@ -102,6 +387,29 @@ enum VBandDevice {
         dah_vk: i32,                    // VK_RCONTROL
         prev:   std::cell::Cell<u8>,    // last reported bitmask (change detection)
     },
+    /// macOS IOHIDManager seize backend — used on macOS 14+ (Sonoma/Sequoia) when
+    /// IOHIDDriver holds the keyboard-class device exclusively and blocks hidapi.
+    /// Opens via kIOHIDOptionsTypeSeizeDevice on a private CFRunLoop thread.
+    #[cfg(target_os = "macos")]
+    MacKbd {
+        ctx:    std::sync::Arc<mac_iohid::MacCtx>,
+        prev:   std::cell::Cell<u8>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    },
+}
+
+impl Drop for VBandDevice {
+    fn drop(&mut self) {
+        // Signal the macOS run-loop thread to stop, then join it so the
+        // IOHIDManager is closed before the Arc<MacCtx> is released.
+        #[cfg(target_os = "macos")]
+        if let VBandDevice::MacKbd { ctx, thread, .. } = self {
+            ctx.stop.store(true, Ordering::Relaxed);
+            if let Some(t) = thread.take() {
+                let _ = t.join();
+            }
+        }
+    }
 }
 
 /// Internal read result returned by [`VBandDevice::read_raw`].
@@ -194,6 +502,23 @@ impl VBandDevice {
                     ReadResult::NoData
                 }
             }
+
+            // ── macOS IOHIDManager seize shim ─────────────────────────────
+            // The background run-loop thread writes the latest paddle bitmask
+            // into ctx.raw_mask via report_cb.  We poll it here and report
+            // only on change (same pattern as WinKbd).
+            #[cfg(target_os = "macos")]
+            VBandDevice::MacKbd { ctx, prev, .. } => {
+                let mask = ctx.raw_mask.load(Ordering::Relaxed);
+                let old  = prev.get();
+                if mask != old {
+                    prev.set(mask);
+                    log::debug!("[vband/mackbd] mask changed 0x{old:02X} → 0x{mask:02X}");
+                    ReadResult::Report(mask)
+                } else {
+                    ReadResult::NoData
+                }
+            }
         }
     }
 
@@ -205,6 +530,8 @@ impl VBandDevice {
             VBandDevice::WinUsb { .. } => "WinUSB",
             #[cfg(target_os = "windows")]
             VBandDevice::WinKbd { .. } => "WinKbd (GetAsyncKeyState)",
+            #[cfg(target_os = "macos")]
+            VBandDevice::MacKbd { .. } => "macOS IOKit (IOHIDManager seize)",
         }
     }
 }
@@ -229,17 +556,28 @@ pub fn is_kbd_only_interface() -> bool {
 /// Try to open the VBand adapter through any available backend.
 /// Returns Err (with a descriptive message) if no readable interface is found.
 fn open_device() -> Result<VBandDevice> {
+    // Track whether the VBand is enumerable at all (device plugged in).
+    // Used by the macOS seize fallback to decide whether to attempt a seize.
+    #[cfg(target_os = "macos")]
+    let mut vband_seen = false;
+
     // ── 1. HidApi ─────────────────────────────────────────────────────────
     //
     // On Windows the VBand exposes a \KBD top-level collection owned by
     // kbdhid.sys.  ReadFile on that interface always returns nothing.
     // If a non-\KBD (generic HID) path exists we prefer it; otherwise we
     // fall through to the WinKbd shim below.
+    //
+    // On macOS 14+ this open will FAIL with kIOReturnNotPrivileged even when
+    // Input Monitoring is GRANTED — the MacKbd seize fallback below fixes this.
     if let Ok(api) = HidApi::new() {
         let all_paths: Vec<_> = api.device_list()
             .filter(|d| d.vendor_id() == VBAND_VID && d.product_id() == VBAND_PID)
             .map(|d| d.path().to_owned())
             .collect();
+
+        #[cfg(target_os = "macos")]
+        if !all_paths.is_empty() { vband_seen = true; }
 
         // Skip \KBD paths on Windows; keep all paths on Linux / macOS.
         let readable: Vec<_> = all_paths.iter().filter(|p| {
@@ -269,11 +607,43 @@ fn open_device() -> Result<VBandDevice> {
             }
         }
         if !all_paths.is_empty() {
-            log::debug!("[vband] {} HID path(s) found but none readable", all_paths.len());
+            log::debug!("[vband] {} HID path(s) found but none openable via HidApi", all_paths.len());
         }
     }
 
-    // ── 2. WinKbd shim (Windows only) ─────────────────────────────────────
+    // ── 2. macOS IOHIDManager seize fallback (macOS only) ─────────────────
+    //
+    // On macOS 14+ (Sonoma / Sequoia) IOHIDDriver claims keyboard-class HID
+    // devices exclusively.  hidapi's IOHIDDeviceOpen(kIOHIDOptionsTypeNone)
+    // is rejected at the kernel level.  We retry with IOHIDManagerOpen using
+    // kIOHIDOptionsTypeSeizeDevice, which takes the device from IOHIDDriver.
+    // This requires Input Monitoring TCC permission (same as hidapi).
+    //
+    // The seize is released in Drop → MacKbd thread stop + join.
+    #[cfg(target_os = "macos")]
+    if vband_seen {
+        log::info!(
+            "[vband] HidApi open failed on macOS — trying IOHIDManager seize \
+             (kIOHIDOptionsTypeSeizeDevice) …"
+        );
+        match mac_iohid::spawn(VBAND_VID, VBAND_PID) {
+            Ok((ctx, thread)) => {
+                log::info!(
+                    "[vband] VBand {:04x}:{:04x} opened via macOS IOHIDManager seize — \
+                     IOHIDDriver exclusive hold bypassed.",
+                    VBAND_VID, VBAND_PID
+                );
+                return Ok(VBandDevice::MacKbd {
+                    ctx,
+                    prev:   std::cell::Cell::new(0),
+                    thread: Some(thread),
+                });
+            }
+            Err(e) => log::warn!("[vband] IOHIDManager seize failed: {e}"),
+        }
+    }
+
+    // ── 3. WinKbd shim (Windows only) ─────────────────────────────────────
     // Only the \KBD interface exists; kbdhid.sys translates VBand modifier
     // byte → LCtrl (DIT) / RCtrl (DAH) key events.  Read via GetAsyncKeyState.
     #[cfg(target_os = "windows")]
@@ -289,7 +659,7 @@ fn open_device() -> Result<VBandDevice> {
         });
     }
 
-    // ── 2. WinUSB fallback (Windows, feature "keyer-vband-winusb") ────────
+    // ── 4. WinUSB fallback (Windows, feature "keyer-vband-winusb") ────────
     #[cfg(all(feature = "keyer-vband-winusb", target_os = "windows"))]
     {
         match try_open_winusb() {
@@ -316,11 +686,14 @@ fn build_open_hint() -> &'static str {
          \n  ‣ The adapter should appear in Device Manager under Human Interface Devices.\
          \n  ‣ If another VBand application is running, close it first."
     } else if cfg!(target_os = "macos") {
-        "\n  Hint: macOS 14+ requires Input Monitoring permission for HID devices.\
+        "\n  Hint: macOS requires 'Input Monitoring' permission for HID keyboard devices.\
          \n  → System Settings → Privacy & Security → Input Monitoring\
-         \n  → Add your terminal app (Terminal, iTerm2, …) and re-launch it.\
-         \n  The device must also be visible in: Apple menu → About This Mac\
-         \n  → System Report → USB."
+         \n  → Add your terminal app (Terminal.app, iTerm2, …) and re-launch it.\
+         \n  On macOS 14+ (Sonoma/Sequoia): cw-qso-sim uses IOHIDManager with\
+         \n  kIOHIDOptionsTypeSeizeDevice to bypass the kernel exclusive hold.\
+         \n  If the seize also failed, the VBand may not be plugged in, or Input\
+         \n  Monitoring permission has not been granted to this process.\
+         \n  Check: Apple menu → About This Mac → System Report → USB."
     } else {
         ""
     }
@@ -880,7 +1253,13 @@ pub fn check_adapter(timeout: Duration) -> anyhow::Result<bool> {
     } else {
         println!("Protocol: HID bitmask  DIT=0x{DIT_MASK:02X}  DAH=0x{DAH_MASK:02X}");
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    if matches!(device, VBandDevice::MacKbd { .. }) {
+        println!("Protocol: macOS IOKit seize (IOHIDManager)  DIT=LCtrl  DAH=RCtrl");
+    } else {
+        println!("Protocol: HID bitmask  DIT=0x{DIT_MASK:02X}  DAH=0x{DAH_MASK:02X}");
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     println!("Protocol: HID bitmask  DIT=0x{DIT_MASK:02X}  DAH=0x{DAH_MASK:02X}");
     println!();
 

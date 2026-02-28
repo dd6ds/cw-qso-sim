@@ -29,6 +29,7 @@ enum Phase {
     Chat { turn: usize },
     WaitChatReply,
     SignOff,
+    WaitFor73,   // DarcCwContest: wait for user to send 73 after SIM sign-off
     Done,
 }
 
@@ -203,9 +204,24 @@ impl QsoEngine {
                 if now >= self.next_tx_at {
                     let tx = self.maybe_typo(&self.script.sign_off.clone());
                     self.last_tx = tx.clone();
-                    self.phase   = Phase::Done;
+                    // In a DARC CW Contest the SIM sends 73 and then waits for
+                    // the user to reply with 73 before the QSO is considered done.
+                    self.phase = match self.style {
+                        QsoStyle::DarcCwContest => Phase::WaitFor73,
+                        _                       => Phase::Done,
+                    };
                     Some(QsoEvent::SimTransmit(tx))
                 } else { None }
+            }
+
+            Phase::WaitFor73 => {
+                // Wait until the user sends "73" (optionally surrounded by other text)
+                if user_input.to_uppercase().contains("73") {
+                    self.phase = Phase::Done;
+                    None
+                } else {
+                    Some(QsoEvent::WaitingForUser)
+                }
             }
 
             Phase::Done => Some(QsoEvent::QsoComplete),
