@@ -161,6 +161,20 @@ ATtiny85 GND         →  Paddle common ground
 ```
 
 
+
+
+### ESP32 (all platforms)
+
+#### Wiring
+
+```
+ESP32 GPIO16   →  LEFT  paddle (DIT)
+ESP32 GPIO17   →  RIGHT paddle (DAH)
+ESP32 GND      →  Paddle common ground
+```
+
+
+
 ### Arduino Nano (all platforms)
 
 The Nano runs `paddle_debug_Arduino_Nano.ino` and sends MIDI bytes over its hardware UART at 31250 baud. No USB-MIDI bridge is needed — cw-qso-sim opens the serial port directly.
