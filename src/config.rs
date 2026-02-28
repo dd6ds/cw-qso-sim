@@ -100,7 +100,7 @@ pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, Rando
 pub enum AdapterType {
     /// Auto-detect hardware; fall back to keyboard if none found
     Auto,
-    /// VBand USB HID paddle (Linux/Mac only; not available in this build on Windows)
+    /// VBand USB HID paddle (Linux/Windows only; not available in this build on MacOS)
     #[cfg_attr(not(feature = "keyer-vband"), value(skip))]
     Vband,
     /// ATtiny85 MIDI paddle
