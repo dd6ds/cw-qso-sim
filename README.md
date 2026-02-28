@@ -239,6 +239,23 @@ Arduino Uno GND →  Paddle common ground
 ```
 
 
+Flashing:
+
+
+File -> Preferences
+
+add https://github.com/FortySevenEffects/arduino_midi_library
+
+Tools -> Manage Libraries
+
+search for FortySevenEffects
+select USB-MIDI -> Install ALL
+
+
+ 
+
+
+
 #### udev rule (Linux / Debian / Mint)
 
 Create `/etc/udev/rules.d/49-digispark.rules`:
