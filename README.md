@@ -396,4 +396,8 @@ Arduino UNO
 ./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-uno --port /dev/ttyUSB0
 
 
+Arduino NANO
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-nano --port /dev/ttyUSB0
+
 
