@@ -175,6 +175,23 @@ Arduino Nano D3  →  RIGHT paddle (DAH)
 Arduino Nano GND →  Paddle common ground
 ```
 
+
+Flashing:
+
+
+File -> Preferences
+
+add https://github.com/FortySevenEffects/arduino_midi_library
+
+Tools -> Manage Libraries
+
+search for FortySevenEffects
+select USB-MIDI -> Install ALL
+
+Processor: ATMega328P (Old Bootloader)
+Port: /dev/ttyUS0
+
+
 #### udev rules (Linux)
 
 Most cheap Nano clones use a CH340 USB–serial chip and appear as `/dev/ttyUSB*`. Genuine Nanos with an ATmega16U2 appear as `/dev/ttyACM*`. Add yourself to the `dialout` group once and you never need `sudo`:
@@ -251,6 +268,7 @@ Tools -> Manage Libraries
 search for FortySevenEffects
 select USB-MIDI -> Install ALL
 
+Port: /dev/ttyUS0
 
  
 
