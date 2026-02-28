@@ -416,13 +416,35 @@ See [VBand USB HID (Windows 11)](#vband-usb-hid-windows-11) above.
 ! VIBE CODED !
 
 
+##Check Adapter##
+
+ATTiny85
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter attiny85 --check-adapter
+
+
+VBAND USB 
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter vband --check-adapter
+
 Arduino UNO
 
-./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-uno --port /dev/ttyUSB0
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-uno --port /dev/ttyUSB0 --check-adapter
 
 
 Arduino NANO
 
-./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-nano --port /dev/ttyUSB0
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-nano --port /dev/ttyUSB0 --check-adapter
+
+ESP8266
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter esp8266 --port /dev/ttyUSB0 --check-adapter
+
+
+ESP32 DEV
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter esp32 --port /dev/ttyUSB0 --check-adapter
+
+
 
 
