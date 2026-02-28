@@ -161,6 +161,15 @@ ATtiny85 GND         →  Paddle common ground
 ```
 
 
+### ESP8266 (all platforms)
+
+#### Wiring
+
+```
+ESP32 GPIO14 (D5)   →  LEFT  paddle (DIT)
+ESP32 GPIO12 (D6)   →  RIGHT paddle (DAH)
+ESP32 GND           →  Paddle common ground
+```
 
 
 ### ESP32 (all platforms)
