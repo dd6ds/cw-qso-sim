@@ -419,12 +419,15 @@ See [VBand USB HID (Windows 11)](#vband-usb-hid-windows-11) above.
 
 GPL v3
 
+---
+
 
 73 de DD6DS
 
 
 ! VIBE CODED !
 
+---
 
 ##Check Adapter##
 
