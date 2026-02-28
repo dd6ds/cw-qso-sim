@@ -177,8 +177,8 @@ ESP32 GND           →  Paddle common ground
 #### Wiring
 
 ```
-ESP32 GPIO16   →  LEFT  paddle (DIT)
-ESP32 GPIO17   →  RIGHT paddle (DAH)
+ESP32 GPIO22   →  LEFT  paddle (DIT)
+ESP32 GPIO23   →  RIGHT paddle (DAH)
 ESP32 GND      →  Paddle common ground
 ```
 
