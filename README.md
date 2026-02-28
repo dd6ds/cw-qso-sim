@@ -283,7 +283,7 @@ The onboard LED (D13) lights up while any paddle is pressed, confirming the firm
 
 1. Install [Arduino IDE](https://www.arduino.cc/en/software)
 2. Install the **MIDI Library** via *Sketch → Include Library → Manage Libraries* → search **MIDI Library** (by Francois Best / lathoub)
-3. Open `paddle_debug_Arduino_Nano.ino` from this repository
+3. Open `paddle_debug_Arduino_UNO.ino` from this repository
 4. *Tools → Board → Arduino AVR Boards → Arduino UNO*
 5. *Tools → Port* → select the Nano's serial port
 6. *Sketch → Upload*
