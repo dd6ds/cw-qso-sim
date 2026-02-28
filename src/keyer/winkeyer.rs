@@ -89,6 +89,23 @@ fn morse_pattern(ch: char) -> &'static [bool] {
         '9' => &[true,  true,  true,  true,  false],
         '?' => &[false, false, true,  true,  false, false],
         '/' => &[true,  false, false, true,  false],
+        // ── Prosign characters echoed by WinKeyer firmware ──────────────────
+        // WK2/WK3 paddle echoback sends these ASCII bytes when the operator
+        // keys the corresponding prosign on the physical paddle.
+        //
+        //   AR  (.-.-.)  → echoed as '+' (WK standard)
+        //   BT  (-...-.) → echoed as '='  (paragraph/separator)
+        //   SK  (...-.-)  → echoed as '%'  (end of QSO, some firmware)
+        //   KN  (-.--.)   → echoed as '('  (go ahead, specific station)
+        //
+        // The patterns here are the combined prosign element sequences
+        // (A+R, B+T, S+K, K+N sent without inter-character gaps).
+        // enqueue_char() schedules them as individual synthetic DIT/DAH events
+        // with inter-element gaps — exactly right for a prosign.
+        '+' => &[false, true,  false, true,  false],           // AR .-.-.
+        '=' => &[true,  false, false, false, true],            // BT -...-
+        '%' => &[false, false, false, true,  false, true],     // SK ...-.-
+        '(' => &[true,  false, true,  true,  false],           // KN -.--.
         _   => &[],
     }
 }

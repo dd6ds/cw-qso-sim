@@ -89,7 +89,16 @@ impl Decoder {
 }
 
 fn decode_code(code: &str) -> Option<char> {
-    // Reverse lookup from encoder table
+    // Reverse lookup from encoder table.
+    //
+    // Prosign patterns (no inter-character gap between constituent letters):
+    //   <AR>  .-.-. → '+' (end of message / over)
+    //   <SK>  ...-.- → decoded as word-space (end of QSO)
+    //   <KN>  -.--. → '(' (go ahead, specific station; same pattern)
+    //   <BK>  -...-.- → decoded as word-space (break)
+    //   <BT>  -...- → '=' (paragraph / separator; same pattern as =)
+    //   <SOS> ...---... → decoded as word-space (distress; rare in sim)
+    //   <HH>  ........ → decoded as word-space (error / erase)
     let table = [
         (".-",    'A'), ("-...",  'B'), ("-.-.",  'C'), ("-..",   'D'),
         (".",     'E'), ("..-.",  'F'), ("--.",   'G'), ("....",  'H'),
@@ -101,9 +110,16 @@ fn decode_code(code: &str) -> Option<char> {
         ("-----", '0'), (".----", '1'), ("..---", '2'), ("...--", '3'),
         ("....-", '4'), (".....", '5'), ("-....", '6'), ("--...", '7'),
         ("---..", '8'), ("----.", '9'),
-        (".-.-.-",'.'), ("--..--",','), ("..--..",'?'), ("-..-.",'/'),
-        (".----.",'\''),(  "-.--.", ')'), ("-.--.",'('),
-        ("...-.-", ' '), // SK → word-space placeholder
+        (".-.-.-", '.'), ("--..--", ','), ("..--..", '?'), ("-..-.", '/'),
+        (".----.", '\''), ("-.--.",  '('), ("-.--.-", ')'),
+        // Prosigns — decoded to their single-character equivalents so they
+        // display meaningfully in the TUI receive buffer.
+        (".-.-.",   '+'),  // <AR>  end of message / over
+        ("-...-",   '='),  // <BT>  paragraph break / separator
+        ("...-.-",  ' '),  // <SK>  end of QSO  (treated as word boundary)
+        ("-...-.-", ' '),  // <BK>  break        (treated as word boundary)
+        ("...---...", ' '), // <SOS> distress (rare; treat as word boundary)
+        ("........", ' '), // <HH>  erase / error signal
     ];
     table.iter().find(|(c, _)| *c == code).map(|(_, ch)| *ch)
 }

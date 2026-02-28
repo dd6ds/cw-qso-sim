@@ -158,7 +158,10 @@ fn main() -> Result<()> {
     let (keyer, is_keyboard, _windows_paddle) = keyer::create_keyer(cfg.adapter, keyer_port, cfg.paddle_mode, user_timing.dot, cfg.switch_paddle)?;
 
     // ── QSO engine ────────────────────────────────────────────────────────────
-    let mut engine = QsoEngine::new(&cfg);
+    // my_qso_serial starts at 1 and would increment across multiple QSOs in
+    // a future multi-QSO session.  For now one process = one QSO.
+    let my_qso_serial: u32 = 1;
+    let mut engine = QsoEngine::new(&cfg, my_qso_serial);
 
     // ── Decoder (your keying) ─────────────────────────────────────────────────
     let mut decoder = Decoder::new(user_timing);

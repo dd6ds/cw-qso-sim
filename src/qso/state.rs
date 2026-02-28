@@ -29,7 +29,7 @@ enum Phase {
     Chat { turn: usize },
     WaitChatReply,
     SignOff,
-    WaitFor73,   // DarcCwContest: wait for user to send 73 after SIM sign-off
+    WaitFor73,   // DarcCwContest / MwcContest: wait for user to send 73 after SIM sign-off
     Done,
 }
 
@@ -49,11 +49,14 @@ pub struct QsoEngine {
 }
 
 impl QsoEngine {
-    pub fn new(cfg: &AppConfig) -> Self {
+    /// `my_serial` is the user's running QSO counter (starts at 1).
+    /// It is embedded in MWC contest exchange hints so the user knows
+    /// which serial number to send back to the sim station.
+    pub fn new(cfg: &AppConfig, my_serial: u32) -> Self {
         let mut rng = SmallRng::from_entropy();
         let ex      = SimExchange::generate(&mut rng);
         let my_rst  = random_rst(&mut rng).to_string();
-        let script  = QsoScript::build(&cfg.mycall, &ex, cfg.qso_style, &my_rst);
+        let script  = QsoScript::build(&cfg.mycall, &ex, cfg.qso_style, &my_rst, my_serial);
 
         let phase = match cfg.who_starts {
             WhoStarts::Sim => Phase::Init,
@@ -161,6 +164,9 @@ impl QsoEngine {
                     let tx = self.maybe_typo(&self.script.ack_report.clone());
                     self.last_tx = tx.clone();
                     let next_phase = match self.style {
+                        // MWC: ack_report IS the sign-off ("TU 73 <SK>"), so
+                        // skip the separate SignOff phase and wait for the user's 73.
+                        QsoStyle::MwcContest => Phase::WaitFor73,
                         QsoStyle::Contest | QsoStyle::DxPileup | QsoStyle::DarcCwContest => Phase::SignOff,
                         _ => Phase::Chat { turn: 0 },
                     };
@@ -204,8 +210,9 @@ impl QsoEngine {
                 if now >= self.next_tx_at {
                     let tx = self.maybe_typo(&self.script.sign_off.clone());
                     self.last_tx = tx.clone();
-                    // In a DARC CW Contest the SIM sends 73 and then waits for
-                    // the user to reply with 73 before the QSO is considered done.
+                    // DARC CW Contest: sim sends 73 then waits for the user to
+                    // reply with 73 before the QSO is considered done.
+                    // (MWC never reaches SignOff — it goes WaitFor73 from SimAcksReport.)
                     self.phase = match self.style {
                         QsoStyle::DarcCwContest => Phase::WaitFor73,
                         _                       => Phase::Done,

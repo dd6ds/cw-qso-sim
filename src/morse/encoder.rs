@@ -52,7 +52,11 @@ pub fn encode(text: &str, timing: &Timing) -> ToneSeq {
         // Check prosign first
         if word.starts_with('<') && word.ends_with('>') {
             if let Some(code) = prosign_to_morse(word) {
-                push_code(&mut seq, code, timing, false);
+                // Prosigns need inter-element gaps (1 dot between each dit/dah)
+                // just like regular characters.  What makes them a *prosign* is the
+                // absence of the 3-dot inter-character gap between their constituent
+                // letters — that gap is simply never appended here.
+                push_code(&mut seq, code, timing, true);
             }
         } else {
             let chars: Vec<char> = word.chars().collect();
