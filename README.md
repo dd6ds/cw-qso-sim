@@ -372,3 +372,10 @@ See [VBand USB HID (Windows 11)](#vband-usb-hid-windows-11) above.
 
 ! VIBE CODED !
 
+
+Arduino UNO
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter arduino-uno --port /dev/ttyUSB0
+
+
+
