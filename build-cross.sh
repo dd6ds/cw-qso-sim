@@ -80,7 +80,8 @@ find_macos_sdk() {
 
     # 2. Already extracted — use it
     local sdk
-    sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null | sort -V | tail -1)
+    sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null \
+          | sort -V | tail -1) || sdk=""
     if [[ -n "$sdk" ]]; then
         SDKROOT="$sdk"
         return 0
@@ -90,7 +91,8 @@ find_macos_sdk() {
     if [[ -f "$MACOS_SDK_ARCHIVE" ]]; then
         echo "  Extracting $(basename "$MACOS_SDK_ARCHIVE") …"
         tar -xJf "$MACOS_SDK_ARCHIVE" -C "$MACOS_SDK_DIR"
-        sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null | sort -V | tail -1)
+        sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null \
+              | sort -V | tail -1) || sdk=""
         if [[ -n "$sdk" ]]; then
             SDKROOT="$sdk"
             return 0
@@ -118,7 +120,8 @@ find_macos_sdk() {
     echo "  Extracting $(basename "$MACOS_SDK_ARCHIVE") …"
     tar -xJf "$MACOS_SDK_ARCHIVE" -C "$MACOS_SDK_DIR"
 
-    sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null | sort -V | tail -1)
+    sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null \
+          | sort -V | tail -1) || sdk=""
     if [[ -n "$sdk" ]]; then
         SDKROOT="$sdk"
         return 0
@@ -225,10 +228,20 @@ WRAPPER
         chmod +x "${wrapper_dir}/zig-link-wrapper.sh"
 
         local linker_var="CARGO_TARGET_$(echo "$target" | tr '[:lower:]-' '[:upper:]_')_LINKER"
-        SDKROOT="$SDKROOT" \
-        COREAUDIO_SDK_PATH="$SDKROOT" \
-        BINDGEN_EXTRA_CLANG_ARGS="-isysroot $SDKROOT -F$SDKROOT/System/Library/Frameworks" \
-        env "${linker_var}=${wrapper_dir}/zig-link-wrapper.sh" \
+
+        # cc-rs reads CFLAGS_<target> (lowercase, dashes → underscores) and
+        # injects those flags into every C compilation it drives.  Without
+        # -isysroot the zig C front-end cannot find IOKit/hid/IOHIDManager.h,
+        # CoreAudio/AudioHardware.h, etc. that live inside the macOS SDK.
+        local cflags_var="CFLAGS_$(echo "$target" | tr '-' '_')"
+        local sdk_cflags="-isysroot $SDKROOT -I$SDKROOT/usr/include -F$SDKROOT/System/Library/Frameworks"
+
+        env \
+            SDKROOT="$SDKROOT" \
+            COREAUDIO_SDK_PATH="$SDKROOT" \
+            BINDGEN_EXTRA_CLANG_ARGS="-isysroot $SDKROOT -F$SDKROOT/System/Library/Frameworks" \
+            "${cflags_var}=${sdk_cflags}" \
+            "${linker_var}=${wrapper_dir}/zig-link-wrapper.sh" \
         cargo zigbuild --release \
             --target      "$target" \
             --target-dir  "$tgt_dir" \
@@ -241,6 +254,103 @@ WRAPPER
     cp "$src" "$dst"
     echo "  ✓  $dst  ($(du -sh "$dst" | cut -f1))"
 }
+
+# ── macOS cross-compile prerequisites — install tools + download SDK ──────────
+# Called once before any builds.  On a native macOS host this is a no-op.
+#
+# Fixes addressed here:
+#   • mkdir is created BEFORE the first `find` so the dir always exists —
+#     previously `find` on a missing dir returned exit-code 1, which with
+#     `set -euo pipefail` silently killed the script before any build ran.
+#   • Every `sdk=$(find …)` carries `|| sdk=""` so a non-zero exit from find
+#     (e.g. empty dir, permission issue) never triggers `set -e`.
+#   • cargo-zigbuild and the two Darwin rustup targets are installed
+#     automatically when missing, so macOS cross-builds actually work.
+prepare_macos_sdk() {
+    # No-op on a native macOS host — Xcode toolchain is used directly.
+    if [[ "$HOST_TRIPLE" == *"-apple-"* ]]; then
+        return 0
+    fi
+
+    echo ""
+    echo "── macOS cross-compile setup ──────────────────────"
+
+    # ── cargo-zigbuild ────────────────────────────────────────────────────────
+    if ! command -v cargo-zigbuild &>/dev/null; then
+        echo "  cargo-zigbuild not found — installing via cargo …"
+        cargo install cargo-zigbuild
+    else
+        echo "  ✓  cargo-zigbuild $(cargo-zigbuild --version 2>/dev/null | head -1)"
+    fi
+
+    # ── rustup Darwin targets ─────────────────────────────────────────────────
+    for darwin_target in x86_64-apple-darwin aarch64-apple-darwin; do
+        if rustup target list --installed 2>/dev/null | grep -q "^${darwin_target}$"; then
+            echo "  ✓  rustup target: ${darwin_target}"
+        else
+            echo "  Adding rustup target: ${darwin_target} …"
+            rustup target add "${darwin_target}"
+        fi
+    done
+
+    # ── macOS SDK ─────────────────────────────────────────────────────────────
+    # Create the cache directory first — find on a missing path returns exit-code
+    # 1, which would trigger set -e and kill the script before any download runs.
+    mkdir -p "$MACOS_SDK_DIR"
+
+    # 1. Already extracted — nothing to do
+    local sdk
+    sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null \
+          | sort -V | tail -1) || sdk=""
+    if [[ -n "$sdk" ]]; then
+        echo "  ✓  SDK already extracted: $sdk"
+        return 0
+    fi
+
+    # 2. Archive already present — just extract it
+    if [[ -f "$MACOS_SDK_ARCHIVE" ]]; then
+        echo "  Archive found — extracting $(basename "$MACOS_SDK_ARCHIVE") …"
+        tar -xJf "$MACOS_SDK_ARCHIVE" -C "$MACOS_SDK_DIR"
+        sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null \
+              | sort -V | tail -1) || sdk=""
+        if [[ -n "$sdk" ]]; then
+            echo "  ✓  Extracted: $sdk"
+        else
+            echo "  ⚠  Extraction produced no *.sdk directory — macOS builds may fail." >&2
+        fi
+        return 0
+    fi
+
+    # 3. Download then extract
+    if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
+        echo "  ⚠  Neither curl nor wget found — cannot download macOS SDK." >&2
+        echo "     Install curl or wget and re-run." >&2
+        return 0
+    fi
+
+    echo "  Downloading MacOSX14.5.tar.xz …"
+    echo "    URL : $MACOS_SDK_URL"
+    echo "    Dest: $MACOS_SDK_ARCHIVE"
+
+    if command -v curl &>/dev/null; then
+        curl -L --fail --progress-bar -o "$MACOS_SDK_ARCHIVE" "$MACOS_SDK_URL"
+    else
+        wget -q --show-progress -O "$MACOS_SDK_ARCHIVE" "$MACOS_SDK_URL"
+    fi
+
+    echo "  Extracting $(basename "$MACOS_SDK_ARCHIVE") to $MACOS_SDK_DIR …"
+    tar -xJf "$MACOS_SDK_ARCHIVE" -C "$MACOS_SDK_DIR"
+
+    sdk=$(find "$MACOS_SDK_DIR" -maxdepth 1 -name '*.sdk' -type d 2>/dev/null \
+          | sort -V | tail -1) || sdk=""
+    if [[ -n "$sdk" ]]; then
+        echo "  ✓  SDK ready: $sdk"
+    else
+        echo "  ⚠  Extraction produced no *.sdk directory — macOS builds may fail." >&2
+    fi
+}
+
+prepare_macos_sdk
 
 # ── Targets ───────────────────────────────────────────────────────────────────
 echo "Starting cross-compile for cw-qso-sim …"
