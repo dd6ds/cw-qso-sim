@@ -25,12 +25,12 @@ Supports iambic paddles (VBand USB HID, ATtiny85/Digispark MIDI), straight keys,
 
 | Adapter | Interface | VID / PID | Platform |
 |---|---|---|---|
-| VBand USB CW Adapter | USB HID | VID `413d` / PID `2107` | Linux, macOS, Windows |
-| ATtiny85 / Digispark | USB MIDI | VID `16d0` / PID `0753` | Linux, macOS, Windows |
-| Arduino Nano | Serial MIDI (31250 baud) | VID `1a86` / PID `7523` (CH340)<br>VID `1a86` / PID `55d4` (CH9102)<br>VID `0403` / PID `6001` (FT232RL)<br>VID `2341` / PID `0043` (ATmega16U2, new bootloader)<br>VID `2341` / PID `0001` (ATmega16U2, old bootloader) | Linux, macOS, Windows |
-| Arduino Uno | Serial MIDI (31250 baud) | VID `2341` / PID `0043` (ATmega16U2, new bootloader)<br>VID `2341` / PID `0001` (ATmega16U2, old bootloader)<br>VID `2341` / PID `0049` (WiFi Rev2)<br>VID `2341` / PID `0069` (R4 Minima)<br>VID `2341` / PID `0070` (R4 WiFi)<br>VID `1a86` / PID `7523` (CH340 clone)<br>VID `0403` / PID `6001` (FT232RL clone) | Linux, macOS, Windows |
-| ESP8266 | Serial MIDI (115200 baud) | VID `1a86` / PID `7523` | Linux, macOS, Windows |
-| ESP32 DEV | Serial MIDI (115200 baud) | VID `10c4` / PID `ea60` | Linux, macOS, Windows |
+| VBand USB CW Adapter | USB HID | VID `413d` / PID `2107` | Linux, Windows |
+| ATtiny85 / Digispark | USB MIDI | VID `16d0` / PID `0753` | Linux, Windows |
+| Arduino Nano | Serial MIDI (31250 baud) | VID `1a86` / PID `7523` (CH340)<br>VID `1a86` / PID `55d4` (CH9102)<br>VID `0403` / PID `6001` (FT232RL)<br>VID `2341` / PID `0043` (ATmega16U2, new bootloader)<br>VID `2341` / PID `0001` (ATmega16U2, old bootloader) | Linux, Windows |
+| Arduino Uno | Serial MIDI (31250 baud) | VID `2341` / PID `0043` (ATmega16U2, new bootloader)<br>VID `2341` / PID `0001` (ATmega16U2, old bootloader)<br>VID `2341` / PID `0049` (WiFi Rev2)<br>VID `2341` / PID `0069` (R4 Minima)<br>VID `2341` / PID `0070` (R4 WiFi)<br>VID `1a86` / PID `7523` (CH340 clone)<br>VID `0403` / PID `6001` (FT232RL clone) | Linux, Windows |
+| ESP8266 | Serial MIDI (115200 baud) | VID `1a86` / PID `7523` | Linux, Windows |
+| ESP32 DEV | Serial MIDI (115200 baud) | VID `10c4` / PID `ea60` | Linux, Windows |
 | Keyboard / text-input | Built-in fallback | All (no hardware needed) |
 
 ---
