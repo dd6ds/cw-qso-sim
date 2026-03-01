@@ -488,6 +488,7 @@ Contest process show
 
 ./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style cwt-contest --cwt-name DENNIS --cwt-nr DL --tone 550 --mycall DD6DS
 
+./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style mwc-contest --cwt-name DENNIS --tone 550 --mycall DD6DS
 
 
 
