@@ -240,14 +240,15 @@ impl QsoEngine {
         }
     }
 
-    /// Returns true if `input` is a valid directed call to the SIM:
-    /// must contain both the SIM's callsign (addressed to) and the
-    /// user's own callsign (from).  E.g. "SM5XY DE DD6DS K".
+    /// Returns true if `input` contains the user's own callsign (mycall).
+    /// The SIM's callsign is NOT required — in real CW the SIM already
+    /// knows its own call; accepting "DD6DS K" is just as valid as
+    /// "SM5XY DE DD6DS K".  Requiring the SIM call caused silent
+    /// failures whenever the user omitted or mistyped it.
     fn input_has_callsign(&self, input: &str) -> bool {
         let up = input.to_uppercase();
         !up.is_empty()
             && up.contains(&self.mycall.to_uppercase())
-            && up.contains(&self.exchange.sim_call.to_uppercase())
     }
 
     /// Returns true if `input` looks like a CQ call from the user

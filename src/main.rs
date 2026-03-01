@@ -438,10 +438,24 @@ fn main() -> Result<()> {
 
         // QSO engine tick — accumulate the full over across word boundaries.
         // Only submit to the engine (and clear) when an end-of-over prosign
-        // is received: K, BK, AR, KN — or Enter in text-adapter mode.
+        // is received — or Enter in text-adapter mode.
+        //
+        // End-of-over markers, covering both text-mode and CW-decoder output:
+        //   "K"   — letter K (.-),              decoded as 'K'
+        //   "BK"  — prosign <BK> (-...-.-),     decoded as ' ' (word-gap)
+        //   "AR"  — prosign <AR> (.-.-.),        decoded as '+' by CW decoder
+        //   "KN"  — prosign <KN> (-.--.) ,       decoded as '(' by CW decoder
+        //
+        // The CW decoder emits '+' for <AR> and '(' for <KN>, so we must
+        // accept those single-char forms in addition to the text-mode strings.
         let end_of_over = text_end_of_over || if word_boundary {
             let last_word = user_tx_acc.trim().to_uppercase();
-            matches!(last_word.split_whitespace().last(), Some("K" | "BK" | "AR" | "KN"))
+            match last_word.split_whitespace().last() {
+                Some("K" | "BK" | "AR" | "KN") => true,
+                // CW-decoder prosign equivalents: <AR> → '+', <KN> → '('
+                Some("+" | "(") => true,
+                _ => false,
+            }
         } else {
             false
         };
