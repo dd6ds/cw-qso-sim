@@ -46,10 +46,23 @@ mode       = "iambic_a"
 # port     = "/dev/ttyUSB0"
 
 [qso]
-# QSO style: "ragchew" | "contest" | "dx_pileup" | "darc_cw_contest" | "random"
+# QSO style (snake_case in this file; CLI --style uses kebab-case, e.g. --style cwt-contest):
+#   "ragchew"         — relaxed rag-chew with name, QTH, rig, WX chat
+#   "contest"         — short RST + serial exchange
+#   "dx_pileup"       — rapid pile-up practice
+#   "darc_cw_contest" — DARC CW contest: RST + DOK exchange
+#   "mwc_contest"     — MWC sprint: RST + serial exchange
+#   "cwt_contest"     — CWT sprint: name + member-nr (or state/country) exchange
+#   "random"          — pick a style at random each QSO
 style        = "ragchew"
 # Simulated operator reaction delay range (milliseconds)
 min_delay_ms = 800
 max_delay_ms = 2500
 # Probability of a simulated typo (0.0 – 1.0, e.g. 0.05 = 5%)
 typo_rate    = 0.05
+
+# ── CWT contest settings (only used when style = "cwt_contest") ───────────────
+# Your operator name sent in the CWT exchange (e.g. your first name or handle)
+# cwt_name = "OP"
+# Your CWT member number (4 digits) OR state/country if not a member (e.g. "DL", "CA")
+# cwt_nr   = "NM"

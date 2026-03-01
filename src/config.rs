@@ -40,9 +40,21 @@ pub struct Cli {
     #[arg(long)]
     pub who_starts: Option<WhoStarts>,
 
-    /// QSO style: ragchew | contest | dx_pileup | darc_cw_contest | mwc_contest | random
+    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | random
     #[arg(long)]
     pub style: Option<QsoStyle>,
+
+    /// Your operator name for cwt_contest exchange (e.g. HANS)
+    #[arg(long)]
+    pub cwt_name: Option<String>,
+
+    /// Your CWT member number or state/country for cwt_contest (e.g. 1234 or DL)
+    #[arg(long)]
+    pub cwt_nr: Option<String>,
+
+    /// Your DARC DOK for darc-cw-contest (e.g. P53).  Use NM if not a DARC member.
+    #[arg(long)]
+    pub my_dok: Option<String>,
 
     /// Keyer adapter: auto | vband | attiny85 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer | keyboard
     #[arg(long)]
@@ -84,6 +96,11 @@ pub struct Cli {
     /// Print the built-in default config.toml to stdout and exit
     #[arg(long, action)]
     pub print_config: bool,
+
+    /// Demo mode: play a complete QSO automatically (no keyer needed), then
+    /// wait for ESC to exit.  Useful to preview a contest style before practising.
+    #[arg(long, action)]
+    pub demo: bool,
 }
 
 // ── Enums shared across CLI + TOML ────────────────────────────────────────────
@@ -93,7 +110,7 @@ pub enum WhoStarts { Me, Sim }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
-pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, Random }
+pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, Random }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -181,6 +198,9 @@ pub struct QsoCfg {
     pub min_delay_ms: Option<u64>,
     pub max_delay_ms: Option<u64>,
     pub typo_rate:    Option<f64>,
+    pub cwt_name:     Option<String>,
+    pub cwt_nr:       Option<String>,
+    pub my_dok:       Option<String>,
 }
 
 // ── Resolved / merged config ──────────────────────────────────────────────────
@@ -206,6 +226,14 @@ pub struct AppConfig {
     pub min_delay_ms:   u64,
     pub max_delay_ms:   u64,
     pub typo_rate:      f64,
+    /// User's operator name for CWT contest exchange
+    pub cwt_name:       String,
+    /// Demo mode: play QSO automatically, no keyer input required
+    pub demo:           bool,
+    /// User's CWT member number or state/country (e.g. "1234" or "DL")
+    pub cwt_nr:         String,
+    /// User's own DARC DOK for darc-cw-contest (e.g. "P53", or "NM" for non-members)
+    pub my_dok:         String,
 }
 
 impl Default for AppConfig {
@@ -229,6 +257,10 @@ impl Default for AppConfig {
             min_delay_ms:   800,
             max_delay_ms:   2500,
             typo_rate:      0.05,
+            cwt_name:       "OP".into(),
+            cwt_nr:         "NM".into(),
+            my_dok:         "NM".into(),
+            demo:           false,
         }
     }
 }
@@ -297,6 +329,9 @@ impl AppConfig {
             if let Some(v) = q.min_delay_ms { self.min_delay_ms = v; }
             if let Some(v) = q.max_delay_ms { self.max_delay_ms = v; }
             if let Some(v) = q.typo_rate    { self.typo_rate    = v; }
+            if let Some(v) = &q.cwt_name    { self.cwt_name     = v.clone(); }
+            if let Some(v) = &q.cwt_nr      { self.cwt_nr       = v.clone(); }
+            if let Some(v) = &q.my_dok      { self.my_dok       = v.clone(); }
         }
     }
 
@@ -313,6 +348,10 @@ impl AppConfig {
         if let Some(v) = cli.paddle_mode { self.paddle_mode = v; }
         if cli.switch_paddle             { self.switch_paddle = true; }
         if let Some(v) = &cli.lang       { self.language    = v.clone(); }
+        if let Some(v) = &cli.cwt_name   { self.cwt_name    = v.clone(); }
+        if let Some(v) = &cli.cwt_nr     { self.cwt_nr      = v.clone(); }
+        if let Some(v) = &cli.my_dok     { self.my_dok      = v.clone(); }
+        if cli.demo                      { self.demo        = true; }
     }
 }
 

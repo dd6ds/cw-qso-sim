@@ -94,7 +94,9 @@ impl Tui {
             f.render_widget(user_block, chunks[2]);
 
             // ── Footer ────────────────────────────────────────────────────
-            let footer_text = if s.text_mode {
+            let footer_text = if s.demo {
+                " DEMO MODE — SIM plays the full QSO automatically   ESC = exit"
+            } else if s.text_mode {
                 " Type callsign/exchange   Space = word   Enter = send over (K)   Esc = quit"
             } else {
                 " Hardware keyer active   Q = quit   Esc = quit"

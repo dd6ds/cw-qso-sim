@@ -13,6 +13,7 @@ use config::{AppConfig, Cli};
 use morse::{Timing, Decoder};
 use qso::{QsoEngine, QsoEvent};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -30,6 +31,7 @@ pub struct AppState {
     pub status:       String,
     pub quit:         bool,
     pub text_mode:    bool,
+    pub demo:         bool,
 }
 
 fn main() -> Result<()> {
@@ -173,8 +175,10 @@ fn main() -> Result<()> {
         sim_wpm:   cfg.sim_wpm,
         user_wpm:  cfg.user_wpm,
         tone_hz:   cfg.tone_hz,
-        status:    "Starting…".into(),
+        status:    if cfg.demo { "DEMO — SIM will play the full QSO…".into() }
+                   else        { "Starting…".into() },
         text_mode: is_keyboard,
+        demo:      cfg.demo,
         ..Default::default()
     }));
 
@@ -186,7 +190,15 @@ fn main() -> Result<()> {
     // The main thread drives the QSO; audio is dispatched via channel.
     // Playback holds the audio mutex for the full sequence — kept separate
     // from the sidetone path to avoid any blocking on the main loop.
-    let (tx_audio, rx_audio) = std::sync::mpsc::channel::<String>();
+    //
+    // `audio_busy` is set to true by the main thread the moment it enqueues a
+    // transmission, and cleared by the audio thread once play_sequence returns.
+    // `tx_audio_done` carries a () signal back to the main loop so demo mode
+    // knows exactly when the SIM has finished speaking.
+    let audio_busy = Arc::new(AtomicBool::new(false));
+    let audio_busy_audio = Arc::clone(&audio_busy);
+    let (tx_audio,      rx_audio)      = std::sync::mpsc::channel::<String>();
+    let (tx_audio_done, rx_audio_done) = std::sync::mpsc::channel::<()>();
     let audio_arc    = Arc::clone(&audio);
     let sim_timing_c = sim_timing;
     thread::spawn(move || {
@@ -194,6 +206,9 @@ fn main() -> Result<()> {
             let seq = morse::encode(&text, &sim_timing_c);
             let mut a = audio_arc.lock().unwrap();
             let _ = a.play_sequence(&seq);
+            drop(a); // release mutex before signalling
+            audio_busy_audio.store(false, Ordering::Relaxed);
+            let _ = tx_audio_done.send(());
         }
     });
 
@@ -248,6 +263,22 @@ fn main() -> Result<()> {
     // meaning the user finished transmitting a word.
     // The engine decides whether the content is sufficient to advance.
     let mut user_tx_acc = String::new();
+
+    // ── Demo mode state ───────────────────────────────────────────────────────
+    // Two-stage pipeline so the user reply is only sent after the SIM finishes
+    // its CW transmission:
+    //
+    //   Stage 1 — demo_queued_response: Option<String>
+    //     Set when WaitingForUser fires.  Waits here until rx_audio_done fires.
+    //
+    //   Stage 2 — demo_pending: Option<(Instant, String)>
+    //     Moved from stage 1 once audio is done.  Fires after a short
+    //     "reaction time" delay (600 ms) to feel human.
+    let mut demo_queued_response: Option<String>                      = None;
+    let mut demo_pending:         Option<(std::time::Instant, String)> = None;
+    // Set to true once the QSO completes in demo mode — keeps the TUI alive
+    // until the user presses ESC.
+    let mut demo_complete: bool = false;
 
     'main: loop {
         // ── Single crossterm event reader ─────────────────────────────────────
@@ -364,6 +395,47 @@ fn main() -> Result<()> {
             };
         }
 
+        // ── Demo: audio-done → stage 2 ────────────────────────────────────────
+        // Drain all done signals from the audio thread.  When we have a queued
+        // response waiting (stage 1), promote it to stage 2 (timed delay).
+        if cfg.demo && !demo_complete {
+            while rx_audio_done.try_recv().is_ok() {
+                if let Some(resp) = demo_queued_response.take() {
+                    let fire_at = std::time::Instant::now()
+                        + Duration::from_millis(600);
+                    demo_pending = Some((fire_at, resp));
+                    let mut st = state.lock().unwrap();
+                    st.status = "DEMO: preparing response…".into();
+                }
+            }
+        }
+
+        // ── Demo auto-injector ─────────────────────────────────────────────────
+        // When a demo response has been scheduled and its timer fires, inject it
+        // directly into the user input accumulator so the engine can advance.
+        if cfg.demo && !demo_complete {
+            if let Some((ref fire_at, ref resp)) = demo_pending {
+                if std::time::Instant::now() >= *fire_at {
+                    let resp = resp.clone();
+                    // Show in the YOUR INPUT panel
+                    {
+                        let mut st = state.lock().unwrap();
+                        st.user_decoded.push_str(&resp);
+                        st.user_decoded.push(' ');
+                        if st.user_decoded.len() > 200 {
+                            let trim = st.user_decoded.len() - 200;
+                            st.user_decoded = st.user_decoded[trim..].to_string();
+                        }
+                        st.status = "DEMO: sending response…".into();
+                    }
+                    user_tx_acc     = resp;
+                    word_boundary   = true;
+                    text_end_of_over = true;
+                    demo_pending    = None;
+                }
+            }
+        }
+
         // QSO engine tick — accumulate the full over across word boundaries.
         // Only submit to the engine (and clear) when an end-of-over prosign
         // is received: K, BK, AR, KN — or Enter in text-adapter mode.
@@ -390,27 +462,62 @@ fn main() -> Result<()> {
                     let mut st = state.lock().unwrap();
                     st.sim_log.push(text.clone());
                     if st.sim_log.len() > 50 { st.sim_log.remove(0); }
-                    st.status = "SIM transmitting…".into();
+                    st.status = if cfg.demo { "DEMO: SIM transmitting…".into() }
+                                else        { "SIM transmitting…".into() };
                 }
+                // Mark audio as busy BEFORE sending to the channel so that
+                // WaitingForUser (which fires on the very next tick) sees the
+                // correct state and knows to wait for the done signal.
+                audio_busy.store(true, Ordering::Relaxed);
                 let _ = tx_audio.send(text);
             }
             Some(QsoEvent::WaitingForUser) => {
-                let mut st = state.lock().unwrap();
-                st.status = "Listening for your key…".into();
+                if cfg.demo && !demo_complete {
+                    // Queue a response only once per waiting phase.
+                    if demo_queued_response.is_none() && demo_pending.is_none() {
+                        if let Some(resp) = engine.demo_response() {
+                            if audio_busy.load(Ordering::Relaxed) {
+                                // SIM is still transmitting — park the response
+                                // here until rx_audio_done fires (stage 1).
+                                demo_queued_response = Some(resp);
+                                let mut st = state.lock().unwrap();
+                                st.status = "DEMO: waiting for SIM to finish…".into();
+                            } else {
+                                // No audio in flight (e.g. ISendCq before SIM
+                                // has sent anything) — go straight to stage 2.
+                                let fire_at = std::time::Instant::now()
+                                    + Duration::from_millis(600);
+                                demo_pending = Some((fire_at, resp));
+                                let mut st = state.lock().unwrap();
+                                st.status = "DEMO: preparing response…".into();
+                            }
+                        }
+                    }
+                } else {
+                    let mut st = state.lock().unwrap();
+                    st.status = "Listening for your key…".into();
+                }
             }
             Some(QsoEvent::QsoComplete) => {
-                {
+                if cfg.demo {
+                    // Keep the TUI alive — user reads the log then presses ESC
+                    demo_complete = true;
                     let mut st = state.lock().unwrap();
-                    st.status = "QSO complete — 73!".into();
+                    st.status = "DEMO COMPLETE — Press ESC to exit".into();
+                } else {
+                    {
+                        let mut st = state.lock().unwrap();
+                        st.status = "QSO complete — 73!".into();
+                    }
+                    // Draw final state, then wait a moment
+                    #[cfg(feature = "tui")]
+                    {
+                        let st = state.lock().unwrap().clone();
+                        tui.draw(&st)?;
+                    }
+                    thread::sleep(Duration::from_secs(3));
+                    break 'main;
                 }
-                // Draw final state, then wait a moment
-                #[cfg(feature = "tui")]
-                {
-                    let st = state.lock().unwrap().clone();
-                    tui.draw(&st)?;
-                }
-                thread::sleep(Duration::from_secs(3));
-                break 'main;
             }
             Some(QsoEvent::RepeatLast) => {
                 let mut st = state.lock().unwrap();

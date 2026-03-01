@@ -46,6 +46,7 @@ pub struct QsoEngine {
     pub mycall:  String,
     pub style:   QsoStyle,
     pub typo_rate: f64,
+    pub my_dok:  String,
 }
 
 impl QsoEngine {
@@ -54,9 +55,10 @@ impl QsoEngine {
     /// which serial number to send back to the sim station.
     pub fn new(cfg: &AppConfig, my_serial: u32) -> Self {
         let mut rng = SmallRng::from_entropy();
-        let ex      = SimExchange::generate(&mut rng);
+        let ex      = SimExchange::generate(&mut rng, cfg.qso_style);
         let my_rst  = random_rst(&mut rng).to_string();
-        let script  = QsoScript::build(&cfg.mycall, &ex, cfg.qso_style, &my_rst, my_serial);
+        let script  = QsoScript::build(&cfg.mycall, &ex, cfg.qso_style, &my_rst, my_serial,
+                                       &cfg.cwt_name, &cfg.cwt_nr, &cfg.my_dok);
 
         let phase = match cfg.who_starts {
             WhoStarts::Sim => Phase::Init,
@@ -73,6 +75,7 @@ impl QsoEngine {
             mycall: cfg.mycall.clone(),
             style:  cfg.qso_style,
             typo_rate: cfg.typo_rate,
+            my_dok: cfg.my_dok.clone(),
             script,
             exchange: ex,
             rng,
@@ -167,6 +170,8 @@ impl QsoEngine {
                         // MWC: ack_report IS the sign-off ("TU 73 <SK>"), so
                         // skip the separate SignOff phase and wait for the user's 73.
                         QsoStyle::MwcContest => Phase::WaitFor73,
+                        // CWT: ack_report is "TU <sim_call>" — QSO is done immediately.
+                        QsoStyle::CwtContest => Phase::Done,
                         QsoStyle::Contest | QsoStyle::DxPileup | QsoStyle::DarcCwContest => Phase::SignOff,
                         _ => Phase::Chat { turn: 0 },
                     };
@@ -276,4 +281,45 @@ impl QsoEngine {
 
     pub fn sim_callsign(&self) -> &str { &self.exchange.sim_call }
     pub fn is_done(&self) -> bool { self.phase == Phase::Done }
+
+    /// Returns a plausible auto-response for the current phase.
+    /// Used by `--demo` mode to drive the QSO without any keyer input.
+    pub fn demo_response(&self) -> Option<String> {
+        match &self.phase {
+            // User answers the SIM's CQ
+            Phase::WaitForMyAnswer => Some(format!(
+                "{} DE {} KN", self.exchange.sim_call, self.mycall
+            )),
+            // User sends CQ (when who_starts = me)
+            Phase::ISendCq => Some(format!("CQ CQ DE {} K", self.mycall)),
+            // User sends their exchange
+            Phase::WaitMyReport => {
+                let sc = &self.exchange.sim_call;
+                Some(match self.style {
+                    QsoStyle::CwtContest => {
+                        // contest_ex already holds "TU <name> <nr>"; append K
+                        format!("{} K", self.script.contest_ex.trim())
+                    }
+                    QsoStyle::MwcContest => {
+                        format!("{sc} UR RST 599 599 001 K")
+                    }
+                    QsoStyle::DarcCwContest => {
+                        format!("{sc} UR RST 599 DOK {} {} AR", self.my_dok, self.my_dok)
+                    }
+                    QsoStyle::Contest | QsoStyle::DxPileup => {
+                        format!("{sc} UR RST 599 001 K")
+                    }
+                    _ => {
+                        // Ragchew
+                        format!("UR RST 579 NAME OP QTH HOME RIG IC7300 ANT DIPOLE K")
+                    }
+                })
+            }
+            // After DARC/MWC sign-off: send 73
+            Phase::WaitFor73 => Some("73 K".to_string()),
+            // Rag-chew conversation turn
+            Phase::WaitChatReply => Some("FB OM TNX ES 73 K".to_string()),
+            _ => None,
+        }
+    }
 }
