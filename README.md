@@ -480,5 +480,16 @@ ESP32 DEV
 cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 
 
+---
+
+Contest process show
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style darc-cw-contest --tone 550 --mycall DD6DS --my-dok P53
+
+
+
+
+
+
 
 
