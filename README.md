@@ -11,7 +11,7 @@ Supports iambic paddles (VBand USB HID, ATtiny85/Digispark MIDI), straight keys,
 
 ## Features
 
-- **QSO engine** — ragchew, contest, DX pile-up, and random styles
+- **QSO engine** — ragchew, contest, DX pile-up, DARC CW, MWC, CWT, WWA, WPX, QTT, SST, and random styles
 - **Iambic keyer** — mode A and B, straight key, or keyboard text-input fallback
 - **Sidetone** — real-time audio feedback via CPAL
 - **Farnsworth timing** — stretch inter-character gaps for beginners
@@ -69,7 +69,8 @@ OPTIONS:
     --port <PORT>            Serial / MIDI port (ATtiny85 port name/substring)
     --midi-port <PORT>       MIDI port override for ATtiny85 (takes precedence over --port)
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
-    --style <STYLE>          ragchew | contest | dx_pileup | darc_cw_contest | mwc-contest | random
+    --style <STYLE>          ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest
+                             wwa-contest | wpx-contest | qtt-award | sst-contest | random
     --lang <LANG>            en | de | fr | it
     --config <PATH>          Custom config file path
     --write-config           Write the built-in default config.toml and exit
@@ -108,10 +109,14 @@ mode       = "iambic_a"      # iambic_a | iambic_b | straight
 # switch_paddle = false      # true = swap DIT and DAH paddles
 
 [qso]
-style        = "ragchew"     # ragchew | contest | dx_pileup | darc_cw_contest | random
+style        = "ragchew"     # ragchew | contest | dx_pileup | darc_cw_contest | mwc_contest
+                             # cwt_contest | wwa_contest | wpx_contest | qtt_award | sst_contest | random
 min_delay_ms = 800           # simulated operator reaction time (ms)
 max_delay_ms = 2500
 typo_rate    = 0.05          # probability of a simulated typo (0.0 – 1.0)
+# cwt_name   = "DENNIS"      # your operator name   (used by cwt-contest and sst-contest)
+# cwt_nr     = "DL"          # your CWT member nr or state/SPC (e.g. "1234", "DL", "MA")
+# my_dok     = "P53"         # your DARC DOK        (used by darc-cw-contest; "NM" if non-member)
 ```
 
 ---
@@ -484,13 +489,49 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 
 ---
 
-Contest process show
+## QSO Styles
 
-./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style darc-cw-contest --tone 550 --mycall DD6DS --my-dok P53
+| Style | `--style` value | Exchange | Notes |
+|---|---|---|---|
+| Rag-chew | `ragchew` | RST + Name + QTH + Rig + Ant + Pwr | Full rag-chew with chat turns |
+| Generic Contest | `contest` | RST + serial | Generic contest format |
+| DX Pile-up | `dx-pileup` | RST + serial | Simulates a DX pile-up |
+| DARC CW Contest | `darc-cw-contest` | RST + DOK | German DARC members only; requires `--my-dok` |
+| MWC Contest | `mwc-contest` | RST + serial | Midwest Wireless Club format |
+| CWT Contest | `cwt-contest` | Name + member nr (or state/country) | Requires `--cwt-name` and `--cwt-nr` |
+| WWA Contest | `wwa-contest` | RST + serial (sent twice) + BK | Uses real WWA special callsigns (118 stations) |
+| WPX Contest | `wpx-contest` | RST + serial | User sends **only** RST + serial (no callsign) |
+| QTT Award | `qtt-award` | RSN + Name + QTH + Pwr + Ant | RSN instead of RST; signs off with **77** |
+| SST Contest | `sst-contest` | Name + SPC (no RST!) | Slow Speed CW; uses `--cwt-name` / `--cwt-nr` as name/SPC |
+| Random | `random` | (varies) | Picks a random style each QSO |
 
-./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style cwt-contest --cwt-name DENNIS --cwt-nr DL --tone 550 --mycall DD6DS --cwt-nr 1234
+### Demo commands — preview any style without a paddle
 
-./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style mwc-contest --cwt-name DENNIS --tone 550 --mycall DD6DS
+```sh
+# Rag-chew
+./cw-qso-sim --demo --style ragchew --mycall DD6DS
+
+# DARC CW Contest  (requires your DOK)
+./cw-qso-sim --demo --style darc-cw-contest --mycall DD6DS --my-dok P53
+
+# MWC Contest
+./cw-qso-sim --demo --style mwc-contest --mycall DD6DS
+
+# CWT Contest  (requires your name and member nr / country)
+./cw-qso-sim --demo --style cwt-contest --mycall DD6DS --cwt-name DENNIS --cwt-nr 1234
+
+# WWA Contest  (special station callsigns auto-selected from 118-entry pool)
+./cw-qso-sim --demo --style wwa-contest --mycall DD6DS
+
+# WPX Contest
+./cw-qso-sim --demo --style wpx-contest --mycall DD6DS
+
+# QTT Award  (quality rag-chew with RSN and 77 sign-off)
+./cw-qso-sim --demo --style qtt-award --mycall DD6DS
+
+# SST Contest  (Slow Speed CW; name + SPC, no RST)
+./cw-qso-sim --demo --style sst-contest --mycall DD6DS --cwt-name DENNIS --cwt-nr DL
+```
 
 
 

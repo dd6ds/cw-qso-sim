@@ -29,7 +29,7 @@ enum Phase {
     Chat { turn: usize },
     WaitChatReply,
     SignOff,
-    WaitFor73,   // DarcCwContest / MwcContest: wait for user to send 73 after SIM sign-off
+    WaitFor73,   // DarcCwContest / MwcContest / WwaContest: wait for user to send 73 after SIM sign-off
     Done,
 }
 
@@ -86,8 +86,11 @@ impl QsoEngine {
     /// `user_input` is the trimmed, uppercased content of the last completed word
     /// from the user's paddle.  Empty string means nothing new was received.
     pub fn tick(&mut self, user_input: &str) -> Option<QsoEvent> {
-        // Handle '?' at any phase — repeat last transmission
-        if user_input.contains('?') && !self.last_tx.is_empty() {
+        // Handle '?' at any phase — repeat last transmission.
+        // Only a *standalone* '?' word (the IMI prosign ..--..) triggers repeat.
+        // A '?' embedded inside another word (e.g. "HW?" in a QTT exchange)
+        // must NOT match — otherwise demo mode would loop forever on QTT.
+        if user_input.split_whitespace().any(|w| w == "?") && !self.last_tx.is_empty() {
             return Some(QsoEvent::SimTransmit(self.last_tx.clone()));
         }
 
@@ -169,9 +172,10 @@ impl QsoEngine {
                     let next_phase = match self.style {
                         // MWC: ack_report IS the sign-off ("TU 73 <SK>"), so
                         // skip the separate SignOff phase and wait for the user's 73.
-                        QsoStyle::MwcContest => Phase::WaitFor73,
-                        // CWT: ack_report is "TU <sim_call>" — QSO is done immediately.
-                        QsoStyle::CwtContest => Phase::Done,
+                        // WWA: same pattern — ack_report is "R TU 73 <SK>", then wait for user 73.
+                        QsoStyle::MwcContest | QsoStyle::WwaContest => Phase::WaitFor73,
+                        // CWT / WPX / SST: ack_report is the final transmission — QSO done immediately.
+                        QsoStyle::CwtContest | QsoStyle::WpxContest | QsoStyle::SstContest => Phase::Done,
                         QsoStyle::Contest | QsoStyle::DxPileup | QsoStyle::DarcCwContest => Phase::SignOff,
                         _ => Phase::Chat { turn: 0 },
                     };
@@ -217,9 +221,10 @@ impl QsoEngine {
                     self.last_tx = tx.clone();
                     // DARC CW Contest: sim sends 73 then waits for the user to
                     // reply with 73 before the QSO is considered done.
-                    // (MWC never reaches SignOff — it goes WaitFor73 from SimAcksReport.)
+                    // QTT Award: sim sends 77 then waits for the user's 77 reply.
+                    // (MWC / WWA never reach SignOff — they go WaitFor73 from SimAcksReport.)
                     self.phase = match self.style {
-                        QsoStyle::DarcCwContest => Phase::WaitFor73,
+                        QsoStyle::DarcCwContest | QsoStyle::QttAward => Phase::WaitFor73,
                         _                       => Phase::Done,
                     };
                     Some(QsoEvent::SimTransmit(tx))
@@ -227,8 +232,9 @@ impl QsoEngine {
             }
 
             Phase::WaitFor73 => {
-                // Wait until the user sends "73" (optionally surrounded by other text)
-                if user_input.to_uppercase().contains("73") {
+                // Wait until the user sends "73" or "77" (QTT Award uses 77 = "Long Live CW")
+                let up = user_input.to_uppercase();
+                if up.contains("73") || up.contains("77") {
                     self.phase = Phase::Done;
                     None
                 } else {
@@ -288,9 +294,11 @@ impl QsoEngine {
     pub fn demo_response(&self) -> Option<String> {
         match &self.phase {
             // User answers the SIM's CQ
-            Phase::WaitForMyAnswer => Some(format!(
-                "{} DE {} KN", self.exchange.sim_call, self.mycall
-            )),
+            // SST: just send callsign (no DE, no sim call prefix)
+            Phase::WaitForMyAnswer => Some(match self.style {
+                QsoStyle::SstContest => format!("{} K", self.mycall),
+                _                   => format!("{} DE {} KN", self.exchange.sim_call, self.mycall),
+            }),
             // User sends CQ (when who_starts = me)
             Phase::ISendCq => Some(format!("CQ CQ DE {} K", self.mycall)),
             // User sends their exchange
@@ -304,11 +312,27 @@ impl QsoEngine {
                     QsoStyle::MwcContest => {
                         format!("{sc} UR RST 599 599 001 K")
                     }
+                    QsoStyle::WwaContest => {
+                        format!("{sc} DE {} 599 001 001 BK", self.mycall)
+                    }
+                    QsoStyle::WpxContest => {
+                        // WPX: user sends only RST + their serial (no callsign)
+                        format!("599 001 K")
+                    }
                     QsoStyle::DarcCwContest => {
                         format!("{sc} UR RST 599 DOK {} {} AR", self.my_dok, self.my_dok)
                     }
                     QsoStyle::Contest | QsoStyle::DxPileup => {
                         format!("{sc} UR RST 599 001 K")
+                    }
+                    QsoStyle::QttAward => {
+                        // QTT: RSN (not RST) + name + QTH + PWR + ANT, end with KN
+                        format!("{sc} DE {} TU RSN 599 NAME OP QTH HOME PWR 100W ANT DIPOLE HW? KN",
+                                self.mycall)
+                    }
+                    QsoStyle::SstContest => {
+                        // SST: greeting + SIM name + user name + user SPC (no RST!)
+                        format!("GE {} OP MA", &self.exchange.sim_name)
                     }
                     _ => {
                         // Ragchew
@@ -316,8 +340,11 @@ impl QsoEngine {
                     }
                 })
             }
-            // After DARC/MWC sign-off: send 73
-            Phase::WaitFor73 => Some("73 K".to_string()),
+            // After sign-off: send 73, or 77 for QTT Award ("Long Live CW")
+            Phase::WaitFor73 => Some(match self.style {
+                QsoStyle::QttAward => "77 <SK>".to_string(),
+                _                  => "73 K".to_string(),
+            }),
             // Rag-chew conversation turn
             Phase::WaitChatReply => Some("FB OM TNX ES 73 K".to_string()),
             _ => None,

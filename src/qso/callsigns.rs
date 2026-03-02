@@ -8,39 +8,40 @@ pub struct SimStation {
     pub country: &'static str,
     pub dok:     &'static str,   // DARC DOK, or "NM" for non-members
     pub cwt_ex:  &'static str,   // CWT exchange: 4-digit member nr OR state/country for non-members
+    pub spc:     &'static str,   // SST SPC: US/VE/VK state or province; DXCC prefix for others
 }
 
 pub static STATIONS: &[SimStation] = &[
-    SimStation { call:"DL1ABC", name:"HANS",    qth:"BERLIN",    country:"DL",  dok:"D01", cwt_ex:"1812" },
-    SimStation { call:"DL2XYZ", name:"PETER",   qth:"HAMBURG",   country:"DL",  dok:"H09", cwt_ex:"DL"   },
-    SimStation { call:"DL5QRS", name:"FRITZ",   qth:"MUNICH",    country:"DL",  dok:"M02", cwt_ex:"3047" },
-    SimStation { call:"OE3KAB", name:"WALTER",  qth:"VIENNA",    country:"OE",  dok:"NM",  cwt_ex:"OE"   },
-    SimStation { call:"PA3ABC", name:"JAN",     qth:"AMSTERDAM", country:"PA",  dok:"NM",  cwt_ex:"1563" },
-    SimStation { call:"G4XYZ",  name:"JOHN",    qth:"LONDON",    country:"G",   dok:"NM",  cwt_ex:"G"    },
-    SimStation { call:"ON4ABC", name:"LUC",     qth:"BRUSSELS",  country:"ON",  dok:"NM",  cwt_ex:"ON"   },
-    SimStation { call:"F5NTX",  name:"PIERRE",  qth:"PARIS",     country:"F",   dok:"NM",  cwt_ex:"2291" },
-    SimStation { call:"I2ABC",  name:"MARCO",   qth:"MILAN",     country:"I",   dok:"NM",  cwt_ex:"I"    },
-    SimStation { call:"SM5XY",  name:"LARS",    qth:"STOCKHOLM", country:"SM",  dok:"NM",  cwt_ex:"SM"   },
-    SimStation { call:"SP5ZAP", name:"TOMASZ",  qth:"WARSAW",    country:"SP",  dok:"NM",  cwt_ex:"SP"   },
-    SimStation { call:"UT5UDX", name:"SERGIY",  qth:"KYIV",      country:"UT",  dok:"NM",  cwt_ex:"UT"   },
-    SimStation { call:"UA9XYZ", name:"IVAN",    qth:"MOSCOW",    country:"UA",  dok:"NM",  cwt_ex:"UA"   },
-    SimStation { call:"W1AW",   name:"HIRAM",   qth:"NEWINGTON", country:"W",   dok:"NM",  cwt_ex:"CT"   },
-    SimStation { call:"K5ZD",   name:"RANDY",   qth:"HARVARD",   country:"W",   dok:"NM",  cwt_ex:"MA"   },
-    SimStation { call:"VE3XYZ", name:"MIKE",    qth:"TORONTO",   country:"VE",  dok:"NM",  cwt_ex:"ON"   },
-    SimStation { call:"JA1ABC", name:"KENJI",   qth:"TOKYO",     country:"JA",  dok:"NM",  cwt_ex:"JA"   },
-    SimStation { call:"VK2XYZ", name:"BRUCE",   qth:"SYDNEY",    country:"VK",  dok:"NM",  cwt_ex:"VK"   },
-    SimStation { call:"ZL2ABC", name:"NEIL",    qth:"AUCKLAND",  country:"ZL",  dok:"NM",  cwt_ex:"ZL"   },
-    SimStation { call:"HB9ABC", name:"BEAT",    qth:"ZURICH",    country:"HB9", dok:"NM",  cwt_ex:"HB"   },
-    SimStation { call:"OK2XYZ", name:"JIRI",    qth:"BRNO",      country:"OK",  dok:"NM",  cwt_ex:"OK"   },
-    SimStation { call:"YL3ABC", name:"JANIS",   qth:"RIGA",      country:"YL",  dok:"NM",  cwt_ex:"YL"   },
-    SimStation { call:"LY5T",   name:"TOMAS",   qth:"VILNIUS",   country:"LY",  dok:"NM",  cwt_ex:"LY"   },
-    SimStation { call:"ES5TV",  name:"TONNO",   qth:"TALLINN",   country:"ES",  dok:"NM",  cwt_ex:"ES"   },
-    SimStation { call:"OH2BH",  name:"MARTTI",  qth:"HELSINKI",  country:"OH",  dok:"NM",  cwt_ex:"OH"   },
-    SimStation { call:"LA5YJ",  name:"BJORN",   qth:"OSLO",      country:"LA",  dok:"NM",  cwt_ex:"LA"   },
-    SimStation { call:"OZ5E",   name:"FLEMMING",qth:"COPENHAGEN",country:"OZ",  dok:"NM",  cwt_ex:"OZ"   },
-    SimStation { call:"EI5DI",  name:"SEAN",    qth:"DUBLIN",    country:"EI",  dok:"NM",  cwt_ex:"EI"   },
-    SimStation { call:"GM4ZUK", name:"ANGUS",   qth:"EDINBURGH", country:"GM",  dok:"NM",  cwt_ex:"GM"   },
-    SimStation { call:"TF3CW",  name:"SIGGI",   qth:"REYKJAVIK", country:"TF",  dok:"NM",  cwt_ex:"TF"   },
+    SimStation { call:"DL1ABC", name:"HANS",    qth:"BERLIN",    country:"DL",  dok:"D01", cwt_ex:"1812", spc:"DL"  },
+    SimStation { call:"DL2XYZ", name:"PETER",   qth:"HAMBURG",   country:"DL",  dok:"H09", cwt_ex:"DL",   spc:"DL"  },
+    SimStation { call:"DL5QRS", name:"FRITZ",   qth:"MUNICH",    country:"DL",  dok:"M02", cwt_ex:"3047", spc:"DL"  },
+    SimStation { call:"OE3KAB", name:"WALTER",  qth:"VIENNA",    country:"OE",  dok:"NM",  cwt_ex:"OE",   spc:"OE"  },
+    SimStation { call:"PA3ABC", name:"JAN",     qth:"AMSTERDAM", country:"PA",  dok:"NM",  cwt_ex:"1563", spc:"PA"  },
+    SimStation { call:"G4XYZ",  name:"JOHN",    qth:"LONDON",    country:"G",   dok:"NM",  cwt_ex:"G",    spc:"G"   },
+    SimStation { call:"ON4ABC", name:"LUC",     qth:"BRUSSELS",  country:"ON",  dok:"NM",  cwt_ex:"ON",   spc:"ON"  },
+    SimStation { call:"F5NTX",  name:"PIERRE",  qth:"PARIS",     country:"F",   dok:"NM",  cwt_ex:"2291", spc:"F"   },
+    SimStation { call:"I2ABC",  name:"MARCO",   qth:"MILAN",     country:"I",   dok:"NM",  cwt_ex:"I",    spc:"I"   },
+    SimStation { call:"SM5XY",  name:"LARS",    qth:"STOCKHOLM", country:"SM",  dok:"NM",  cwt_ex:"SM",   spc:"SM"  },
+    SimStation { call:"SP5ZAP", name:"TOMASZ",  qth:"WARSAW",    country:"SP",  dok:"NM",  cwt_ex:"SP",   spc:"SP"  },
+    SimStation { call:"UT5UDX", name:"SERGIY",  qth:"KYIV",      country:"UT",  dok:"NM",  cwt_ex:"UT",   spc:"UT"  },
+    SimStation { call:"UA9XYZ", name:"IVAN",    qth:"MOSCOW",    country:"UA",  dok:"NM",  cwt_ex:"UA",   spc:"UA"  },
+    SimStation { call:"W1AW",   name:"HIRAM",   qth:"NEWINGTON", country:"W",   dok:"NM",  cwt_ex:"CT",   spc:"CT"  },
+    SimStation { call:"K5ZD",   name:"RANDY",   qth:"HARVARD",   country:"W",   dok:"NM",  cwt_ex:"MA",   spc:"MA"  },
+    SimStation { call:"VE3XYZ", name:"MIKE",    qth:"TORONTO",   country:"VE",  dok:"NM",  cwt_ex:"ON",   spc:"ON"  },
+    SimStation { call:"JA1ABC", name:"KENJI",   qth:"TOKYO",     country:"JA",  dok:"NM",  cwt_ex:"JA",   spc:"JA"  },
+    SimStation { call:"VK2XYZ", name:"BRUCE",   qth:"SYDNEY",    country:"VK",  dok:"NM",  cwt_ex:"VK",   spc:"VK"  },
+    SimStation { call:"ZL2ABC", name:"NEIL",    qth:"AUCKLAND",  country:"ZL",  dok:"NM",  cwt_ex:"ZL",   spc:"ZL"  },
+    SimStation { call:"HB9ABC", name:"BEAT",    qth:"ZURICH",    country:"HB9", dok:"NM",  cwt_ex:"HB",   spc:"HB"  },
+    SimStation { call:"OK2XYZ", name:"JIRI",    qth:"BRNO",      country:"OK",  dok:"NM",  cwt_ex:"OK",   spc:"OK"  },
+    SimStation { call:"YL3ABC", name:"JANIS",   qth:"RIGA",      country:"YL",  dok:"NM",  cwt_ex:"YL",   spc:"YL"  },
+    SimStation { call:"LY5T",   name:"TOMAS",   qth:"VILNIUS",   country:"LY",  dok:"NM",  cwt_ex:"LY",   spc:"LY"  },
+    SimStation { call:"ES5TV",  name:"TONNO",   qth:"TALLINN",   country:"ES",  dok:"NM",  cwt_ex:"ES",   spc:"ES"  },
+    SimStation { call:"OH2BH",  name:"MARTTI",  qth:"HELSINKI",  country:"OH",  dok:"NM",  cwt_ex:"OH",   spc:"OH"  },
+    SimStation { call:"LA5YJ",  name:"BJORN",   qth:"OSLO",      country:"LA",  dok:"NM",  cwt_ex:"LA",   spc:"LA"  },
+    SimStation { call:"OZ5E",   name:"FLEMMING",qth:"COPENHAGEN",country:"OZ",  dok:"NM",  cwt_ex:"OZ",   spc:"OZ"  },
+    SimStation { call:"EI5DI",  name:"SEAN",    qth:"DUBLIN",    country:"EI",  dok:"NM",  cwt_ex:"EI",   spc:"EI"  },
+    SimStation { call:"GM4ZUK", name:"ANGUS",   qth:"EDINBURGH", country:"GM",  dok:"NM",  cwt_ex:"GM",   spc:"GM"  },
+    SimStation { call:"TF3CW",  name:"SIGGI",   qth:"REYKJAVIK", country:"TF",  dok:"NM",  cwt_ex:"TF",   spc:"TF"  },
 ];
 
 /// RST values realistic for CW
@@ -201,4 +202,32 @@ pub static DOK_CODES: &[&str] = &[
 /// Pick a random DOK code from the official pool
 pub fn random_dok<R: rand::Rng>(rng: &mut R) -> &'static str {
     DOK_CODES.choose(rng).unwrap()
+}
+
+/// Official WWA (World Wide Award) special station callsigns — sourced from
+/// https://hamaward.cloud/wwa/teams  (2026 edition, 118 entries)
+pub static WWA_CALLSIGNS: &[&str] = &[
+    "3B8WWA", "3Z6I",    "4M5A",    "4M5DX",   "4U1A",    "5B4WWA",  "8A1A",
+    "9M2WWA", "9M8WWA",  "A43WWA",  "A65D",    "AT2WWA",  "AT3WWA",  "AT4WWA",
+    "AT6WWA", "AT7WWA",  "BA3RA",   "BA7CK",   "BG0DXC",  "BH9CA",   "BI4SSB",
+    "BY1RX",  "BY2WL",   "BY5HB",   "BY6SX",   "BY8MA",   "CQ7WWA",  "CR2WWA",
+    "CR5WWA", "CR6WWA",  "D4W",     "DA0WWA",  "DL0WWA",  "DU0WWA",  "E2WWA",
+    "E7W",    "EG1WWA",  "EG2WWA",  "EG3WWA",  "EG4WWA",  "EG5WWA",  "EG6WWA",
+    "EG7WWA", "EG8WW",   "EG9WWA",  "EM0WWA",  "GB0WWA",  "GB1WWA",  "GB2WWA",
+    "GB4WWA", "GB5WWA",  "GB6WWA",  "GB8WWA",  "GB9WWA",  "HB9WWA",  "HI3WWA",
+    "HI6WWA", "HI7WWA",  "HI8WWA",  "HZ1WWA",  "II0WWA",  "II1WWA",  "II2WWA",
+    "II3WWA", "II4WWA",  "II5WWA",  "II6WWA",  "II7WWA",  "II8WWA",  "II9WWA",
+    "IR0WWA", "IR1WWA",  "LA1WWA",  "LR1WWA",  "LZ0WWA",  "N0W",     "N1W",
+    "N4W",    "N6W",     "N8W",     "N9W",     "OL6WWA",  "OP0WWA",  "PA26WWA",
+    "PC26WWA","PD26WWA", "PE26WWA", "PF26WWA", "RU0LL",   "RW1F",    "S53WWA",
+    "SB9WWA", "SC9WWA",  "SD9WWA",  "SN0WWA",  "SN1WWA",  "SN2WWA",  "SN3WWA",
+    "SN4WWA", "SN6WWA",  "SO3WWA",  "SX0W",    "TK4TH",   "TM18WWA", "TM1WWA",
+    "TM29WWA","TM7WWA",  "TM9WWA",  "UP7WWA",  "VB2WWA",  "VC1WWA",  "VE9WWA",
+    "VJ6X",   "VR2WAA",  "W4I",     "YI1RN",   "YL73R",   "YO0WWA",  "YU45MJA",
+    "Z30WWA", "ZW5B",
+];
+
+/// Pick a random WWA special station callsign
+pub fn random_wwa_callsign<R: rand::Rng>(rng: &mut R) -> &'static str {
+    WWA_CALLSIGNS.choose(rng).unwrap()
 }

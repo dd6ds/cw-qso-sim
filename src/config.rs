@@ -40,7 +40,7 @@ pub struct Cli {
     #[arg(long)]
     pub who_starts: Option<WhoStarts>,
 
-    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | random
+    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | wwa-contest | wpx-contest | qtt-award | sst-contest | random
     #[arg(long)]
     pub style: Option<QsoStyle>,
 
@@ -110,7 +110,7 @@ pub enum WhoStarts { Me, Sim }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
-pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, Random }
+pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, WwaContest, WpxContest, QttAward, SstContest, Random }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]

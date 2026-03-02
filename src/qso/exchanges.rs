@@ -3,7 +3,6 @@ use rand::Rng;
 use super::callsigns::*;
 use crate::config::QsoStyle;
 
-
 pub struct SimExchange {
     pub sim_call:   String,
     pub sim_name:   String,
@@ -17,6 +16,8 @@ pub struct SimExchange {
     pub sim_serial: u32,
     /// CWT contest exchange: 4-digit member number or state/country for non-members
     pub cwt_ex:     String,
+    /// SST SPC: US/VE/VK state or province; DXCC prefix for other countries
+    pub spc:        String,
 }
 
 impl SimExchange {
@@ -27,8 +28,14 @@ impl SimExchange {
         } else {
             random_station(rng)
         };
+        // For WWA contest use an official WWA special station callsign
+        let sim_call = if style == QsoStyle::WwaContest {
+            random_wwa_callsign(rng).to_string()
+        } else {
+            st.call.to_string()
+        };
         Self {
-            sim_call:   st.call.to_string(),
+            sim_call,
             sim_name:   st.name.to_string(),
             sim_qth:    st.qth.to_string(),
             // German (DL) stations are always DARC members — draw a random DOK
@@ -52,6 +59,7 @@ impl SimExchange {
                         } else {
                             st.cwt_ex.to_string()
                         },
+            spc:        st.spc.to_string(),
         }
     }
 }
@@ -82,6 +90,7 @@ impl QsoScript {
         let rig = &ex.rig;
         let ant = &ex.ant;
         let pwr = &ex.pwr;
+        let spc = &ex.spc;
 
         // ── MWC Contest: RST + running serial number ───────────────────────────
         // Exchange pattern (sim calls CQ, user answers):
@@ -150,6 +159,133 @@ impl QsoScript {
                 sign_off,
                 // contest_ex is the hint showing what the USER should send back
                 contest_ex: format!("{sc} UR RST 599 DOK {my_dok} {my_dok} <AR>"),
+            };
+        }
+
+        // ── WPX Contest: RST + serial number ──────────────────────────────────
+        // Exchange pattern (sim calls CQ, user answers):
+        //   SIM → CQ WPX TEST <sim> <sim> K
+        //   USR → <my> K
+        //   SIM → <my> <rst> <sim_serial> K
+        //   USR → <rst> <my_serial> K           ← just RST + serial, no callsign
+        //   SIM → TU QSL 73                     ← combined ack + sign-off, QSO done
+        if style == QsoStyle::WpxContest {
+            let sim_ser = ex.sim_serial;
+            let cq         = format!("CQ WPX TEST {sc} {sc} K");
+            let answer     = format!("{mycall} DE {sc} {sc} K");
+            let report     = format!("{mycall} {sr} {sim_ser:03} K");
+            // Combined ack + sign-off — QSO is done immediately after this.
+            let ack_report = format!("TU QSL 73");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),   // not reached for WPX
+                // Hint shown to the user: just RST + their serial, no callsign
+                contest_ex: format!("599 {my_serial:03} K"),
+            };
+        }
+
+        // ── WWA Contest: RST + serial number (sent twice) + BK ────────────────
+        // Exchange pattern (sim calls CQ, user answers):
+        //   SIM → CQ WWA <sim> <sim> K
+        //   USR → <my> <my> K
+        //   SIM → <my> DE <sim> <rst> <sim_serial> <sim_serial> BK
+        //   USR → <sim> DE <my> 599 <my_serial> <my_serial> BK
+        //   SIM → R TU 73 <SK>          ← combined ack + sign-off
+        //   USR → 73                    ← user echoes, sim waits for this
+        if style == QsoStyle::WwaContest {
+            let sim_ser = ex.sim_serial;
+            let cq         = format!("CQ WWA {sc} {sc} K");
+            let answer     = format!("{mycall} DE {sc} {sc} K");
+            let report     = format!("{mycall} DE {sc} {sr} {sim_ser:03} {sim_ser:03} BK");
+            // Combined ack + sign-off — sent after the user's report.
+            // The sim goes directly to WaitFor73 after this, no separate sign-off.
+            let ack_report = format!("R TU 73 <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),   // not reached for WWA
+                // Hint shown to the user: what they should send back
+                contest_ex: format!("{sc} DE {mycall} 599 {my_serial:03} {my_serial:03} BK"),
+            };
+        }
+
+        // ── QTT Award: Quality True Telegraphist — full rag-chew with RSN ─────
+        // Rules from https://www.no5nn.org/award/
+        //   • RSN (Readability-Strength-Note) replaces RST
+        //   • Minimum exchange: RSN + Name + QTH + PWR + ANT
+        //   • CQ must end with K (never bare callsign or <AR> alone)
+        //   • Sign-off uses "77" ("Long Live CW") instead of "73"
+        //   • Both sides must send 77 before QSO is complete
+        //
+        // Exchange pattern:
+        //   SIM → CQ CQ DE <sim> <sim> K
+        //   USR → <sim> DE <my> K
+        //   SIM → <my> DE <sim> GE OM UR RSN <rsn> NAME <name> QTH <qth> PWR <pwr> ANT <ant> HW? KN
+        //   USR → TU RSN 599 NAME OP QTH HOME PWR 100W ANT DIPOLE HW? KN
+        //   SIM → (ack + optional chat turns)
+        //   SIM → OK <name> TU FB QSO 77 ES GL DE <sim> <SK>
+        //   USR → 77                     ← sim waits for this
+        if style == QsoStyle::QttAward {
+            let cq = format!("CQ CQ DE {sc} {sc} K");
+            let answer = format!("{mycall} DE {sc} {sc} K");
+
+            // Full exchange: RSN + name + QTH + PWR + ANT
+            let report = format!(
+                "{mycall} DE {sc} GE OM UR RSN {sr} {sr} \
+                 NAME {sn} {sn} QTH {sq} {sq} \
+                 PWR {pwr} ANT {ant} HW? KN"
+            );
+
+            // SIM acks user's exchange and sends its own RSN + rig info
+            let ack_report = format!(
+                "TU {mycall} UR RSN {my_rst} {my_rst} \
+                 NAME {sn} QTH {sq} RIG {rig} ANT {ant} PWR {pwr} \
+                 HW? <AR>"
+            );
+
+            let chat = vec![
+                format!("WX HR FINE TEMP WARM HW UR WX? <AR>"),
+                format!("UR SIG VY FB HR NICE QSO ES GD QTT PROCEDURE HW? <AR>"),
+                format!("BEEN OPS MANY YRS NW ENJOY QTT STDS VY MUCH HW? <AR>"),
+            ];
+
+            // Sign-off uses "77" (Long Live CW) instead of "73"
+            let sign_off = format!("OK {sn} TU FB QSO 77 ES GL DE {sc} <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat,
+                sign_off,
+                // Hint: what the user should send back (RSN + name + QTH + PWR + ANT)
+                contest_ex: format!(
+                    "{sc} DE {mycall} TU RSN 599 NAME OP QTH HOME PWR 100W ANT DIPOLE HW? KN"
+                ),
+            };
+        }
+
+        // ── SST (Slow Speed CW Contest): Name + SPC, no RST ───────────────────
+        // Exchange pattern (sim calls CQ, user answers):
+        //   SIM → CQ SST <sim> K
+        //   USR → <my> K                      ← just callsign
+        //   SIM → <my> <sim_name> <sim_spc>   ← name + state/country, no RST!
+        //   USR → GE <sim_name> <name> <spc>  ← greeting + their name + my name + my SPC
+        //   SIM → GL <name> TU <sim> K        ← ack using user's name, QSO done
+        if style == QsoStyle::SstContest {
+            let cq         = format!("CQ SST {sc} K");
+            let answer     = format!("{mycall} DE {sc} K");
+            let report     = format!("{mycall} {sn} {spc}");
+            // SIM acks using the user's configured name (cwt_name) — combined sign-off, QSO done
+            let ack_report = format!("GL {cwt_name} TU {sc} K");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),   // not reached for SST
+                // Hint: greeting + SIM name + user name + user SPC
+                contest_ex: format!("GE {sn} {cwt_name} {cwt_nr}"),
             };
         }
 
