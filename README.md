@@ -162,6 +162,21 @@ ATtiny85 Pin 0 (P0)  →  RIGHT paddle (DAH)
 ATtiny85 GND         →  Paddle common ground
 ```
 
+#### Programming the ATtiny85
+
+1. Install [Arduino IDE](https://www.arduino.cc/en/software)
+2. Add Digispark board support:  
+   *File → Preferences → Additional Board Manager URLs*  
+   `https://raw.githubusercontent.com/digistump/arduino-boards-index/master/package_digistump_index.json`
+3. *Tools → Board → Boards Manager* → install **Digistump AVR Boards**
+4. Install [DigisparkMIDI](https://github.com/heartscrytech/DigisparkMIDI) library:  
+   *Sketch → Include Library → Manage Libraries* → search for **DigisparkMIDI**
+5. Open `paddle_decoder.ino` from this repository
+6. *Tools → Board → Digispark (Default - 16.5 MHz)*
+7. *Sketch → Upload* — plug in the Digispark when Arduino IDE prompts you to
+
+
+
 
 ### ESP8266 (all platforms)
 
@@ -347,19 +362,6 @@ KERNEL=="ttyUSB*", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE:="066
 
 
 Then reload: `sudo udevadm control --reload-rules && sudo udevadm trigger`
-
-#### Programming the ATtiny85
-
-1. Install [Arduino IDE](https://www.arduino.cc/en/software)
-2. Add Digispark board support:  
-   *File → Preferences → Additional Board Manager URLs*  
-   `https://raw.githubusercontent.com/digistump/arduino-boards-index/master/package_digistump_index.json`
-3. *Tools → Board → Boards Manager* → install **Digistump AVR Boards**
-4. Install [DigisparkMIDI](https://github.com/heartscrytech/DigisparkMIDI) library:  
-   *Sketch → Include Library → Manage Libraries* → search for **DigisparkMIDI**
-5. Open `paddle_decoder.ino` from this repository
-6. *Tools → Board → Digispark (Default - 16.5 MHz)*
-7. *Sketch → Upload* — plug in the Digispark when Arduino IDE prompts you to
 
 ---
 
