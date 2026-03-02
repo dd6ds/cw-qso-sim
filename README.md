@@ -58,25 +58,45 @@ cw-qso-sim --adapter keyboard
 USAGE:
     cw-qso-sim [OPTIONS]
 
-OPTIONS:
-    --mycall <CALL>          Your callsign
+IDENTITY
+    --mycall <CALL>          Your callsign (e.g. DD6DS)
+
+SPEED & AUDIO
     --sim-wpm <N>            Simulator TX speed in WPM (default: 25)
     --user-wpm <N>           Your keying / decoder speed in WPM (default: 18)
     --tone <HZ>              Sidetone frequency in Hz (default: 620)
-    --adapter <TYPE>         auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard
+
+KEYER
+    --adapter <TYPE>         auto | vband | attiny85 | arduino-nano | arduino-uno |
+                             esp32 | esp8266 | winkeyer | keyboard
     --paddle-mode <MODE>     iambic_a | iambic_b | straight
     --switch-paddle          Swap DIT and DAH paddles
-    --port <PORT>            Serial / MIDI port (ATtiny85 port name/substring)
-    --midi-port <PORT>       MIDI port override for ATtiny85 (takes precedence over --port)
+    --port <PORT>            Serial port for arduino-nano, arduino-uno, esp32, esp8266,
+                             winkeyer (e.g. /dev/ttyUSB0, COM3)
+    --midi-port <PORT>       MIDI port name or substring for ATtiny85 (overrides --port)
+
+QSO
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
-    --style <STYLE>          ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest
-                             wwa-contest | wpx-contest | qtt-award | sst-contest | random
-    --lang <LANG>            en | de | fr | it
-    --config <PATH>          Custom config file path
+    --style <STYLE>          ragchew | contest | dx-pileup | darc-cw-contest |
+                             mwc-contest | cwt-contest | wwa-contest | wpx-contest |
+                             qtt-award | sst-contest | random
+    --cwt-name <NAME>        Your operator name for CWT / SST exchange (e.g. DENNIS)
+    --cwt-nr <NR>            Your CWT member nr or state/SPC (e.g. 1234, DL, MA)
+    --my-dok <DOK>           Your DARC DOK for darc-cw-contest (e.g. P53; NM if non-member)
+    --demo                   Auto-play a complete QSO without a keyer; press ESC to exit
+
+INTERFACE
+    --lang <LANG>            en | de | fr | it  (default: en)
+
+CONFIGURATION
+    -c, --config <PATH>      Custom config file path
     --write-config           Write the built-in default config.toml and exit
     --print-config           Print the built-in default config.toml to stdout
-    --list-ports             List detected HID / MIDI keyer devices and exit
+
+HARDWARE UTILS
+    --list-ports             List detected HID / MIDI / serial keyer devices and exit
     --check-adapter          Interactive paddle test (press DIT then DAH when prompted)
+
     -h, --help               Print help
     -V, --version            Print version
 ```
