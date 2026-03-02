@@ -486,7 +486,7 @@ Contest process show
 
 ./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style darc-cw-contest --tone 550 --mycall DD6DS --my-dok P53
 
-./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style cwt-contest --cwt-name DENNIS --cwt-nr DL --tone 550 --mycall DD6DS
+./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style cwt-contest --cwt-name DENNIS --cwt-nr DL --tone 550 --mycall DD6DS --cwt-nr 1234
 
 ./cw-qso-sim-x86_64-unknown-linux-gnu --demo --style mwc-contest --cwt-name DENNIS --tone 550 --mycall DD6DS
 
