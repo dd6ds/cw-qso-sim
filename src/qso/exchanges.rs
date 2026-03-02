@@ -141,7 +141,7 @@ impl QsoScript {
                 "{mycall} DE {sc} RST {sr} {sr} DOK {dok} {dok} <AR>"
             );
             // sim acks with TU + our RST (sim doesn't know our DOK, just confirms)
-            let ack_report = format!("TU {mycall} RST {my_rst} {my_rst} <AR>");
+            let ack_report = format!("{mycall} RST {my_rst} {my_rst} <AR>");
             let sign_off   = format!("TU 73 DE {sc} <SK>");
 
             return Self {
