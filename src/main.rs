@@ -17,6 +17,80 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
+// ── Translated status messages ────────────────────────────────────────────────
+struct StatusMsg {
+    starting:          &'static str,
+    demo_starting:     &'static str,
+    transmitting:      &'static str,
+    demo_transmitting: &'static str,
+    demo_waiting:      &'static str,
+    demo_preparing:    &'static str,
+    demo_sending:      &'static str,
+    listening:         &'static str,
+    demo_complete:     &'static str,
+    qso_complete:      &'static str,
+    repeating:         &'static str,
+}
+
+impl StatusMsg {
+    fn new(lang: &str) -> Self {
+        match lang {
+            "de" => Self {
+                starting:          "Starte…",
+                demo_starting:     "DEMO — SIM spielt das gesamte QSO…",
+                transmitting:      "SIM sendet…",
+                demo_transmitting: "DEMO: SIM sendet…",
+                demo_waiting:      "DEMO: Warte auf SIM…",
+                demo_preparing:    "DEMO: Antwort wird vorbereitet…",
+                demo_sending:      "DEMO: Antwort wird gesendet…",
+                listening:         "Warte auf dein Signal…",
+                demo_complete:     "DEMO ABGESCHLOSSEN — ESC zum Beenden",
+                qso_complete:      "QSO beendet — 73!",
+                repeating:         "Letzte Sendung wird wiederholt…",
+            },
+            "fr" => Self {
+                starting:          "Démarrage…",
+                demo_starting:     "DÉMO — SIM joue le QSO complet…",
+                transmitting:      "SIM émet…",
+                demo_transmitting: "DÉMO: SIM émet…",
+                demo_waiting:      "DÉMO: attente de fin SIM…",
+                demo_preparing:    "DÉMO: préparation de la réponse…",
+                demo_sending:      "DÉMO: envoi de la réponse…",
+                listening:         "En attente de votre signal…",
+                demo_complete:     "DÉMO TERMINÉE — ESC pour quitter",
+                qso_complete:      "QSO terminé — 73!",
+                repeating:         "Répétition de la dernière émission…",
+            },
+            "it" => Self {
+                starting:          "Avvio…",
+                demo_starting:     "DEMO — SIM riproduce il QSO completo…",
+                transmitting:      "SIM trasmette…",
+                demo_transmitting: "DEMO: SIM trasmette…",
+                demo_waiting:      "DEMO: attesa fine SIM…",
+                demo_preparing:    "DEMO: preparazione risposta…",
+                demo_sending:      "DEMO: invio risposta…",
+                listening:         "In attesa del tuo segnale…",
+                demo_complete:     "DEMO COMPLETATA — ESC per uscire",
+                qso_complete:      "QSO terminato — 73!",
+                repeating:         "Ripetizione ultima trasmissione…",
+            },
+            _ => Self {  // English (default)
+                starting:          "Starting…",
+                demo_starting:     "DEMO — SIM will play the full QSO…",
+                transmitting:      "SIM transmitting…",
+                demo_transmitting: "DEMO: SIM transmitting…",
+                demo_waiting:      "DEMO: waiting for SIM to finish…",
+                demo_preparing:    "DEMO: preparing response…",
+                demo_sending:      "DEMO: sending response…",
+                listening:         "Listening for your key…",
+                demo_complete:     "DEMO COMPLETE — Press ESC to exit",
+                qso_complete:      "QSO complete — 73!",
+                repeating:         "Repeating last TX…",
+            },
+        }
+    }
+}
+
 // ── Shared UI state (passed to TUI draw) ─────────────────────────────────────
 #[derive(Default, Clone)]
 pub struct AppState {
@@ -136,8 +210,9 @@ fn main() -> Result<()> {
     // ── Load config ───────────────────────────────────────────────────────────
     let cfg = AppConfig::load(&cli)?;
 
-    // ── i18n ──────────────────────────────────────────────────────────────────
+    // ── i18n / status messages ────────────────────────────────────────────────
     let _lang = i18n::I18n::new(&cfg.language);
+    let sm = StatusMsg::new(&cfg.language);
 
     // ── Timing — two independent clocks ──────────────────────────────────────
     // sim_timing  : drives audio playback of the simulator's CW
@@ -175,8 +250,8 @@ fn main() -> Result<()> {
         sim_wpm:   cfg.sim_wpm,
         user_wpm:  cfg.user_wpm,
         tone_hz:   cfg.tone_hz,
-        status:    if cfg.demo { "DEMO — SIM will play the full QSO…".into() }
-                   else        { "Starting…".into() },
+        status:    if cfg.demo { sm.demo_starting.into() }
+                   else        { sm.starting.into() },
         text_mode: is_keyboard,
         demo:      cfg.demo,
         ..Default::default()
@@ -405,7 +480,7 @@ fn main() -> Result<()> {
                         + Duration::from_millis(600);
                     demo_pending = Some((fire_at, resp));
                     let mut st = state.lock().unwrap();
-                    st.status = "DEMO: preparing response…".into();
+                    st.status = sm.demo_preparing.into();
                 }
             }
         }
@@ -426,7 +501,7 @@ fn main() -> Result<()> {
                             let trim = st.user_decoded.len() - 200;
                             st.user_decoded = st.user_decoded[trim..].to_string();
                         }
-                        st.status = "DEMO: sending response…".into();
+                        st.status = sm.demo_sending.into();
                     }
                     user_tx_acc     = resp;
                     word_boundary   = true;
@@ -476,8 +551,8 @@ fn main() -> Result<()> {
                     let mut st = state.lock().unwrap();
                     st.sim_log.push(text.clone());
                     if st.sim_log.len() > 50 { st.sim_log.remove(0); }
-                    st.status = if cfg.demo { "DEMO: SIM transmitting…".into() }
-                                else        { "SIM transmitting…".into() };
+                    st.status = if cfg.demo { sm.demo_transmitting.into() }
+                                else        { sm.transmitting.into() };
                 }
                 // Mark audio as busy BEFORE sending to the channel so that
                 // WaitingForUser (which fires on the very next tick) sees the
@@ -495,7 +570,7 @@ fn main() -> Result<()> {
                                 // here until rx_audio_done fires (stage 1).
                                 demo_queued_response = Some(resp);
                                 let mut st = state.lock().unwrap();
-                                st.status = "DEMO: waiting for SIM to finish…".into();
+                                st.status = sm.demo_waiting.into();
                             } else {
                                 // No audio in flight (e.g. ISendCq before SIM
                                 // has sent anything) — go straight to stage 2.
@@ -503,13 +578,13 @@ fn main() -> Result<()> {
                                     + Duration::from_millis(600);
                                 demo_pending = Some((fire_at, resp));
                                 let mut st = state.lock().unwrap();
-                                st.status = "DEMO: preparing response…".into();
+                                st.status = sm.demo_preparing.into();
                             }
                         }
                     }
                 } else {
                     let mut st = state.lock().unwrap();
-                    st.status = "Listening for your key…".into();
+                    st.status = sm.listening.into();
                 }
             }
             Some(QsoEvent::QsoComplete) => {
@@ -517,11 +592,11 @@ fn main() -> Result<()> {
                     // Keep the TUI alive — user reads the log then presses ESC
                     demo_complete = true;
                     let mut st = state.lock().unwrap();
-                    st.status = "DEMO COMPLETE — Press ESC to exit".into();
+                    st.status = sm.demo_complete.into();
                 } else {
                     {
                         let mut st = state.lock().unwrap();
-                        st.status = "QSO complete — 73!".into();
+                        st.status = sm.qso_complete.into();
                     }
                     // Draw final state, then wait a moment
                     #[cfg(feature = "tui")]
@@ -535,7 +610,7 @@ fn main() -> Result<()> {
             }
             Some(QsoEvent::RepeatLast) => {
                 let mut st = state.lock().unwrap();
-                st.status = "Repeating last TX…".into();
+                st.status = sm.repeating.into();
             }
             None => {}
         }
