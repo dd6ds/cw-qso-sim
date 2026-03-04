@@ -113,6 +113,16 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // ── --help  ───────────────────────────────────────────────────────────────
+    // Handled before config loading so that --lang <x> --help works without
+    // a config file present.
+    if cli.help {
+        let lang_code = cli.lang.as_deref().unwrap_or("en");
+        let i18n = i18n::I18n::new(lang_code);
+        config::print_help(&i18n);
+        return Ok(());
+    }
+
     // ── --print-config  ───────────────────────────────────────────────────────
     if cli.print_config {
         print!("{}", config::DEFAULT_CONFIG_TOML);

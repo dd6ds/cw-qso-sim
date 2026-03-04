@@ -11,9 +11,10 @@ pub const DEFAULT_CONFIG_TOML: &str = include_str!("../config.toml.example");
 // ── CLI ───────────────────────────────────────────────────────────────────────
 #[derive(Parser, Debug)]
 #[command(
-    name        = "cw-qso-sim",
-    about       = "Morse Code QSO Simulator  |  DD6DS",
+    name              = "cw-qso-sim",
+    about             = "Morse Code QSO Simulator  |  DD6DS",
     version,
+    disable_help_flag = true,
 )]
 pub struct Cli {
     /// Config file path (default: ~/.config/cw-qso-sim/config.toml)
@@ -32,6 +33,10 @@ pub struct Cli {
     #[arg(long)]
     pub user_wpm: Option<u8>,
 
+    /// Farnsworth effective WPM — stretches inter-character gaps; 0 = off (default: 0)
+    #[arg(long)]
+    pub farnsworth: Option<u8>,
+
     /// Sidetone frequency Hz
     #[arg(long)]
     pub tone: Option<u32>,
@@ -40,7 +45,7 @@ pub struct Cli {
     #[arg(long)]
     pub who_starts: Option<WhoStarts>,
 
-    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | wwa-contest | wpx-contest | qtt-award | sst-contest | random
+    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | wwa-contest | wpx-contest | qtt-award | sst-contest | cq-dx | random
     #[arg(long)]
     pub style: Option<QsoStyle>,
 
@@ -101,6 +106,10 @@ pub struct Cli {
     /// wait for ESC to exit.  Useful to preview a contest style before practising.
     #[arg(long, action)]
     pub demo: bool,
+
+    /// Print help (translated when --lang is set)
+    #[arg(short = 'h', long = "help", action = clap::ArgAction::SetTrue)]
+    pub help: bool,
 }
 
 // ── Enums shared across CLI + TOML ────────────────────────────────────────────
@@ -110,7 +119,7 @@ pub enum WhoStarts { Me, Sim }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
-pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, WwaContest, WpxContest, QttAward, SstContest, Random }
+pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, WwaContest, WpxContest, QttAward, SstContest, CqDx, Random }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -337,9 +346,10 @@ impl AppConfig {
 
     fn apply_cli(&mut self, cli: &Cli) {
         if let Some(v) = &cli.mycall     { self.mycall      = v.clone(); }
-        if let Some(v) = cli.sim_wpm     { self.sim_wpm     = v; }
-        if let Some(v) = cli.user_wpm    { self.user_wpm    = v; }
-        if let Some(v) = cli.tone        { self.tone_hz     = v; }
+        if let Some(v) = cli.sim_wpm     { self.sim_wpm        = v; }
+        if let Some(v) = cli.user_wpm    { self.user_wpm       = v; }
+        if let Some(v) = cli.farnsworth  { self.farnsworth_wpm = v; }
+        if let Some(v) = cli.tone        { self.tone_hz        = v; }
         if let Some(v) = cli.who_starts  { self.who_starts  = v; }
         if let Some(v) = cli.style       { self.qso_style   = v; }
         if let Some(v) = cli.adapter     { self.adapter     = v; }
@@ -366,4 +376,51 @@ fn dirs_next() -> PathBuf {
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_default();
     PathBuf::from(home).join(".config")
+}
+
+// ── Translated --help printer ─────────────────────────────────────────────────
+/// Print the translated --help text to stdout.
+/// Call this after parsing the CLI so that `--lang` is already resolved.
+pub fn print_help(lang: &crate::i18n::I18n) {
+    let version = env!("CARGO_PKG_VERSION");
+    println!("cw-qso-sim {version}");
+    println!("{}", lang.t("cli.about"));
+    println!();
+    println!("{}", lang.t("cli.usage"));
+    println!("  cw-qso-sim [OPTIONS]");
+    println!();
+    println!("{}", lang.t("cli.options"));
+
+    // Each row: (flag column text, i18n key for description)
+    let rows: &[(&str, &str)] = &[
+        ("  -c, --config <FILE>",       "cli.help.config"),
+        ("      --mycall <CALLSIGN>",   "cli.help.mycall"),
+        ("      --sim-wpm <WPM>",       "cli.help.sim_wpm"),
+        ("      --user-wpm <WPM>",      "cli.help.user_wpm"),
+        ("      --farnsworth <WPM>",    "cli.help.farnsworth"),
+        ("      --tone <HZ>",           "cli.help.tone"),
+        ("      --who-starts <WHO>",    "cli.help.who_starts"),
+        ("      --style <STYLE>",        "cli.help.style"),
+        ("      --cwt-name <NAME>",     "cli.help.cwt_name"),
+        ("      --cwt-nr <NR>",         "cli.help.cwt_nr"),
+        ("      --my-dok <DOK>",        "cli.help.my_dok"),
+        ("      --adapter <ADAPTER>",   "cli.help.adapter"),
+        ("      --port <PORT>",         "cli.help.port"),
+        ("      --midi-port <PORT>",    "cli.help.midi_port"),
+        ("      --paddle-mode <MODE>",  "cli.help.paddle_mode"),
+        ("      --switch-paddle",       "cli.help.switch_paddle"),
+        ("      --lang <LANG>",         "cli.help.lang"),
+        ("      --list-ports",          "cli.help.list_ports"),
+        ("      --check-adapter",       "cli.help.check_adapter"),
+        ("      --write-config",        "cli.help.write_config"),
+        ("      --print-config",        "cli.help.print_config"),
+        ("      --demo",                "cli.help.demo"),
+        ("  -h, --help",                "cli.help.help"),
+        ("  -V, --version",             "cli.help.version"),
+    ];
+
+    let col_width = rows.iter().map(|(f, _)| f.len()).max().unwrap_or(0) + 2;
+    for (flag, key) in rows {
+        println!("{:<col_width$}{}", flag, lang.t(key));
+    }
 }

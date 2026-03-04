@@ -289,6 +289,33 @@ impl QsoScript {
             };
         }
 
+        // ── CQ DX: International DX QSO — RST + Name + QTH exchange ──────────
+        // Exchange pattern (sim calls CQ DX, user answers):
+        //   SIM → CQ DX CQ DX CQ DX DE <sim> <sim> <sim> K
+        //   USR → <sim> DE <my> <my> 599 599 TU K     ← callsign + RST
+        //   SIM → <my> DE <sim> <rst> <rst> TU NAME <name> <name> QTH <qth> <qth> BT HW? BK
+        //   USR → <sim> DE <my> 559 559 NAME OP QTH HOME BT QSL TU 73 SK
+        //   SIM → <my> DE <sim> 73 <SK>               ← final ack
+        if style == QsoStyle::CqDx {
+            let cq     = format!("CQ DX CQ DX DE {sc} {sc} K");
+            let answer = format!("{mycall} DE {sc} {sc} K");
+            let report = format!(
+                "{mycall} DE {sc} {sr} {sr} TU NAME {sn} {sn} QTH {sq} {sq} BT HW? BK"
+            );
+            // Final ack — QSO done immediately after this
+            let ack_report = format!("{mycall} DE {sc} 73 <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),   // not reached for CqDx
+                // Hint: what the user should send back
+                contest_ex: format!(
+                    "{sc} DE {mycall} {my_rst} {my_rst} TU NAME OP QTH HOME BT QSL TU 73 SK"
+                ),
+            };
+        }
+
         // ── All other styles ───────────────────────────────────────────────────
         let cq = format!("CQ CQ DE {sc} {sc} K");
         let answer = format!("{mycall} DE {sc} {sc} K");

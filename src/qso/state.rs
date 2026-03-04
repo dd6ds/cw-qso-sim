@@ -174,8 +174,9 @@ impl QsoEngine {
                         // skip the separate SignOff phase and wait for the user's 73.
                         // WWA: same pattern — ack_report is "R TU 73 <SK>", then wait for user 73.
                         QsoStyle::MwcContest | QsoStyle::WwaContest => Phase::WaitFor73,
-                        // CWT / WPX / SST: ack_report is the final transmission — QSO done immediately.
-                        QsoStyle::CwtContest | QsoStyle::WpxContest | QsoStyle::SstContest => Phase::Done,
+                        // CWT / WPX / SST / CqDx: ack_report is the final transmission — QSO done immediately.
+                        QsoStyle::CwtContest | QsoStyle::WpxContest | QsoStyle::SstContest
+                        | QsoStyle::CqDx => Phase::Done,
                         QsoStyle::Contest | QsoStyle::DxPileup | QsoStyle::DarcCwContest => Phase::SignOff,
                         _ => Phase::Chat { turn: 0 },
                     };
@@ -321,6 +322,10 @@ impl QsoEngine {
                     }
                     QsoStyle::DarcCwContest => {
                         format!("{sc} UR RST 599 DOK {} {} AR", self.my_dok, self.my_dok)
+                    }
+                    QsoStyle::CqDx => {
+                        format!("{sc} DE {} {my_rst} {my_rst} TU NAME OP QTH HOME BT QSL TU 73 SK",
+                                self.mycall, my_rst = self.my_rst)
                     }
                     QsoStyle::Contest | QsoStyle::DxPileup => {
                         format!("{sc} UR RST 599 001 K")
