@@ -22,6 +22,7 @@ struct Labels {
     typing:           &'static str,
     current:          &'static str,
     status:           &'static str,
+    decode_off:       &'static str,
     footer_demo:      &'static str,
     footer_text:      &'static str,
     footer_keyer:     &'static str,
@@ -39,6 +40,7 @@ impl Labels {
                 typing:           "EINGABE:  ",
                 current:          "TASTE:    ",
                 status:           "STATUS:   ",
+                decode_off:       "[ DEKODIERUNG AUS ]",
                 footer_demo:  " DEMO-MODUS — SIM spielt das gesamte QSO automatisch   ESC = Beenden",
                 footer_text:  " Rufzeichen/Austausch tippen   Leerzeichen = Wort   Enter = Over senden (K)   Esc = Beenden",
                 footer_keyer: " Hardware-Keyer aktiv   Q = Beenden   Esc = Beenden",
@@ -52,6 +54,7 @@ impl Labels {
                 typing:           "FRAPPE:  ",
                 current:          "ACTUEL:  ",
                 status:           "STATUT:  ",
+                decode_off:       "[ DÉCODAGE DÉSACTIVÉ ]",
                 footer_demo:  " MODE DÉMO — SIM joue le QSO complet automatiquement   ESC = quitter",
                 footer_text:  " Saisir l'indicatif/échange   Espace = mot   Entrée = fin d'over (K)   Esc = quitter",
                 footer_keyer: " Manipulateur actif   Q = quitter   Esc = quitter",
@@ -65,6 +68,7 @@ impl Labels {
                 typing:           "DIGITA:  ",
                 current:          "ATTUALE: ",
                 status:           "STATO:   ",
+                decode_off:       "[ DECODIFICA DISATTIVATA ]",
                 footer_demo:  " MODALITÀ DEMO — SIM riproduce il QSO automaticamente   ESC = uscita",
                 footer_text:  " Digita nominativo/scambio   Spazio = parola   Invio = fine over (K)   Esc = uscita",
                 footer_keyer: " Manipolatore attivo   Q = uscita   Esc = uscita",
@@ -78,6 +82,7 @@ impl Labels {
                 typing:           "TYPING:  ",
                 current:          "CURRENT: ",
                 status:           "STATUS:  ",
+                decode_off:       "[ DECODE OFF ]",
                 footer_demo:  " DEMO MODE — SIM plays the full QSO automatically   ESC = exit",
                 footer_text:  " Type callsign/exchange   Space = word   Enter = send over (K)   Esc = quit",
                 footer_keyer: " Hardware keyer active   Q = quit   Esc = quit",
@@ -130,12 +135,19 @@ impl Tui {
             f.render_widget(header, chunks[0]);
 
             // ── SIM TX ────────────────────────────────────────────────────
-            let sim_text: Vec<Line> = s.sim_log.iter()
-                .map(|l| Line::from(Span::styled(
-                    l.clone(),
-                    Style::default().fg(Color::Green),
-                )))
-                .collect();
+            let sim_text: Vec<Line> = if s.no_decode {
+                vec![Line::from(Span::styled(
+                    lb.decode_off,
+                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
+                ))]
+            } else {
+                s.sim_log.iter()
+                    .map(|l| Line::from(Span::styled(
+                        l.clone(),
+                        Style::default().fg(Color::Green),
+                    )))
+                    .collect()
+            };
             let sim_block = Paragraph::new(sim_text)
                 .block(Block::default()
                     .title(format!("{}({}) ", lb.sim_tx_title, s.sim_call))
@@ -145,23 +157,37 @@ impl Tui {
             f.render_widget(sim_block, chunks[1]);
 
             // ── User decoded ──────────────────────────────────────────────
-            let user_lines: Vec<Line> = vec![
-                Line::from(vec![
-                    Span::styled(format!("{} ", lb.decoded), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-                    Span::styled(s.user_decoded.clone(), Style::default().fg(Color::White)),
-                ]),
-                Line::from(vec![
-                    Span::styled(
-                        format!("{} ", if s.text_mode { lb.typing } else { lb.current }),
-                        Style::default().fg(Color::DarkGray)
-                    ),
-                    Span::styled(s.current_code.clone(), Style::default().fg(Color::Cyan)),
-                ]),
-                Line::from(vec![
-                    Span::styled(format!("{} ", lb.status), Style::default().fg(Color::DarkGray)),
-                    Span::styled(s.status.clone(), Style::default().fg(Color::Magenta)),
-                ]),
-            ];
+            let user_lines: Vec<Line> = if s.no_decode {
+                vec![
+                    Line::from(Span::styled(
+                        lb.decode_off,
+                        Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
+                    )),
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::styled(format!("{} ", lb.status), Style::default().fg(Color::DarkGray)),
+                        Span::styled(s.status.clone(), Style::default().fg(Color::Magenta)),
+                    ]),
+                ]
+            } else {
+                vec![
+                    Line::from(vec![
+                        Span::styled(format!("{} ", lb.decoded), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                        Span::styled(s.user_decoded.clone(), Style::default().fg(Color::White)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled(
+                            format!("{} ", if s.text_mode { lb.typing } else { lb.current }),
+                            Style::default().fg(Color::DarkGray)
+                        ),
+                        Span::styled(s.current_code.clone(), Style::default().fg(Color::Cyan)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled(format!("{} ", lb.status), Style::default().fg(Color::DarkGray)),
+                        Span::styled(s.status.clone(), Style::default().fg(Color::Magenta)),
+                    ]),
+                ]
+            };
             let user_block = Paragraph::new(user_lines)
                 .block(Block::default()
                     .title(lb.your_input_title)

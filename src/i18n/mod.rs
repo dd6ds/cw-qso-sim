@@ -96,6 +96,7 @@ lang_map!(En, "English", [
     "cli.help.write_config"  => "Write the built-in default config.toml to the config path and exit",
     "cli.help.print_config"  => "Print the built-in default config.toml to stdout and exit",
     "cli.help.demo"          => "Demo mode: play a complete QSO automatically (no keyer needed), then wait for ESC to exit",
+    "cli.help.no_decode"     => "Hide decoded CW text on screen — QSO still advances; useful for self-testing without a cheat-sheet",
     "cli.help.version"       => "Print version",
     "cli.help.help"          => "Print help",
 ]);
@@ -151,6 +152,7 @@ lang_map!(De, "Deutsch", [
     "cli.help.write_config"  => "Standard-config.toml in den Konfigurationspfad schreiben und beenden",
     "cli.help.print_config"  => "Eingebaute Standard-config.toml auf stdout ausgeben und beenden",
     "cli.help.demo"          => "Demo-Modus: vollständiges QSO automatisch spielen (kein Keyer nötig), dann auf ESC warten",
+    "cli.help.no_decode"     => "CW-Dekodierung ausblenden — QSO läuft weiter; nützlich zum Selbsttest ohne Spickzettel",
     "cli.help.version"       => "Version anzeigen",
     "cli.help.help"          => "Hilfe anzeigen",
 ]);
@@ -206,6 +208,7 @@ lang_map!(Fr, "Français", [
     "cli.help.write_config"  => "Écrire le config.toml par défaut dans le chemin de configuration et quitter",
     "cli.help.print_config"  => "Afficher le config.toml intégré sur stdout et quitter",
     "cli.help.demo"          => "Mode démo : jouer un QSO complet automatiquement (pas de manipulateur requis), puis attendre ESC",
+    "cli.help.no_decode"     => "Masquer le décodage CW à l'écran — le QSO avance quand même ; utile pour s'auto-évaluer sans aide",
     "cli.help.version"       => "Afficher la version",
     "cli.help.help"          => "Afficher l'aide",
 ]);
@@ -261,6 +264,7 @@ lang_map!(It, "Italiano", [
     "cli.help.write_config"  => "Scrivi il config.toml predefinito nel percorso di configurazione ed esci",
     "cli.help.print_config"  => "Stampa il config.toml integrato su stdout ed esci",
     "cli.help.demo"          => "Modalità demo: esegui un QSO completo automaticamente (nessun manipolatore necessario), poi attendi ESC",
+    "cli.help.no_decode"     => "Nasconde la decodifica CW a schermo — il QSO avanza normalmente; utile per auto-valutarsi senza supporto",
     "cli.help.version"       => "Mostra la versione",
     "cli.help.help"          => "Mostra l'aiuto",
 ]);

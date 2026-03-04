@@ -106,6 +106,7 @@ pub struct AppState {
     pub quit:         bool,
     pub text_mode:    bool,
     pub demo:         bool,
+    pub no_decode:    bool,
 }
 
 fn main() -> Result<()> {
@@ -264,6 +265,7 @@ fn main() -> Result<()> {
                    else        { sm.starting.into() },
         text_mode: is_keyboard,
         demo:      cfg.demo,
+        no_decode: cfg.no_decode,
         ..Default::default()
     }));
 
@@ -439,16 +441,19 @@ fn main() -> Result<()> {
             decoder.push_element(is_dah, el_dur);
         }
 
-        // Tick decoder
+        // Tick decoder — always run so the QSO engine can advance;
+        // only update the UI display when --no-decode is not set.
         let mut word_boundary = false;
         if let Some(new_chars) = decoder.tick() {
             if new_chars.contains(' ') { word_boundary = true; }
             user_tx_acc.push_str(&new_chars);
-            let mut st = state.lock().unwrap();
-            st.user_decoded.push_str(&new_chars);
-            if st.user_decoded.len() > 200 {
-                let trim = st.user_decoded.len() - 200;
-                st.user_decoded = st.user_decoded[trim..].to_string();
+            if !cfg.no_decode {
+                let mut st = state.lock().unwrap();
+                st.user_decoded.push_str(&new_chars);
+                if st.user_decoded.len() > 200 {
+                    let trim = st.user_decoded.len() - 200;
+                    st.user_decoded = st.user_decoded[trim..].to_string();
+                }
             }
         }
 
@@ -470,8 +475,8 @@ fn main() -> Result<()> {
             if eoo { text_end_of_over = true; }
         }
 
-        // Update current_code display
-        {
+        // Update current_code display (suppressed when --no-decode is set)
+        if !cfg.no_decode {
             let mut st = state.lock().unwrap();
             st.current_code = if is_keyboard {
                 kb_buf.clone()  // show what's being typed
@@ -559,8 +564,10 @@ fn main() -> Result<()> {
             Some(QsoEvent::SimTransmit(text)) => {
                 {
                     let mut st = state.lock().unwrap();
-                    st.sim_log.push(text.clone());
-                    if st.sim_log.len() > 50 { st.sim_log.remove(0); }
+                    if !cfg.no_decode {
+                        st.sim_log.push(text.clone());
+                        if st.sim_log.len() > 50 { st.sim_log.remove(0); }
+                    }
                     st.status = if cfg.demo { sm.demo_transmitting.into() }
                                 else        { sm.transmitting.into() };
                 }
