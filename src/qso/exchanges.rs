@@ -1,23 +1,29 @@
 // src/qso/exchanges.rs  —  Build human-like QSO exchange sentences
 use rand::Rng;
-use super::callsigns::*;
+use super::callsigns::{
+    random_station, random_dl_station, random_wwa_callsign,
+    random_dok, random_rst, random_rig, random_ant, random_pwr,
+    random_pota_ref, random_sota_ref, random_tota_ref, random_cota_ref,
+};
 use crate::config::QsoStyle;
 
 pub struct SimExchange {
-    pub sim_call:   String,
-    pub sim_name:   String,
-    pub sim_qth:    String,
-    pub dok:        String,
-    pub rst_to_me:  String,
-    pub rig:        String,
-    pub ant:        String,
-    pub pwr:        String,
+    pub sim_call:       String,
+    pub sim_name:       String,
+    pub sim_qth:        String,
+    pub dok:            String,
+    pub rst_to_me:      String,
+    pub rig:            String,
+    pub ant:            String,
+    pub pwr:            String,
     /// QSO serial number for the sim station (used in MWC / contest exchanges)
-    pub sim_serial: u32,
+    pub sim_serial:     u32,
     /// CWT contest exchange: 4-digit member number or state/country for non-members
-    pub cwt_ex:     String,
+    pub cwt_ex:         String,
     /// SST SPC: US/VE/VK state or province; DXCC prefix for other countries
-    pub spc:        String,
+    pub spc:            String,
+    /// POTA park ref (K-XXXX), SOTA summit ref (W1/WR-001), TOTA tower ref (US-XXXX)
+    pub activator_ref:  String,
 }
 
 impl SimExchange {
@@ -34,6 +40,14 @@ impl SimExchange {
         } else {
             st.call.to_string()
         };
+        let activator_ref = match style {
+            QsoStyle::Pota => random_pota_ref(rng, st.country),
+            QsoStyle::Sota => random_sota_ref(rng, st.country),
+            QsoStyle::Tota => random_tota_ref(rng, st.country),
+            QsoStyle::Cota => random_cota_ref(rng, st.country),
+            _              => String::new(),
+        };
+
         Self {
             sim_call,
             sim_name:   st.name.to_string(),
@@ -60,6 +74,7 @@ impl SimExchange {
                             st.cwt_ex.to_string()
                         },
             spc:        st.spc.to_string(),
+            activator_ref,
         }
     }
 }
@@ -313,6 +328,92 @@ impl QsoScript {
                 contest_ex: format!(
                     "{sc} DE {mycall} {my_rst} {my_rst} TU NAME OP QTH HOME BT QSL TU 73 SK"
                 ),
+            };
+        }
+
+        // ── POTA (Parks on the Air): RST + park reference ─────────────────────
+        // Exchange pattern (sim activates a park, calls CQ POTA):
+        //   SIM → CQ POTA CQ POTA DE <sim> <sim> K
+        //   USR → <sim> DE <my> K
+        //   SIM → <my> <rst> <park_ref> K
+        //   USR → TU 73 K           ← acknowledge, QSO done
+        if style == QsoStyle::Pota {
+            let park = &ex.activator_ref;
+            let cq         = format!("CQ POTA CQ POTA DE {sc} {sc} K");
+            let answer     = format!("{mycall} DE {sc} {sc} K");
+            let report     = format!("{mycall} {sr} {park} K");
+            let ack_report = format!("73 DE {sc} <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),
+                contest_ex: format!("TU 73 K"),
+            };
+        }
+
+        // ── SOTA (Summits on the Air): RST + summit reference ─────────────────
+        // SIM operates portable (/P) from a summit.
+        // Exchange pattern:
+        //   SIM → CQ SOTA DE <sim>/P <sim>/P K
+        //   USR → <sim>/P DE <my> K
+        //   SIM → <my> <rst> <summit_ref> K
+        //   USR → TU 73 K           ← acknowledge, QSO done
+        if style == QsoStyle::Sota {
+            let summit = &ex.activator_ref;
+            let sp         = format!("{sc}/P");  // portable suffix
+            let cq         = format!("CQ SOTA DE {sp} {sp} K");
+            let answer     = format!("{mycall} DE {sp} {sp} K");
+            let report     = format!("{mycall} {sr} {summit} K");
+            let ack_report = format!("73 DE {sp} <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),
+                contest_ex: format!("TU 73 K"),
+            };
+        }
+
+        // ── TOTA (Towers on the Air): RST + tower reference ───────────────────
+        // Exchange pattern (sim activates a tower, calls CQ TOTA):
+        //   SIM → CQ TOTA CQ TOTA DE <sim> <sim> K
+        //   USR → <sim> DE <my> K
+        //   SIM → <my> <rst> <tower_ref> K
+        //   USR → TU 73 K           ← acknowledge, QSO done
+        if style == QsoStyle::Tota {
+            let tower = &ex.activator_ref;
+            let cq         = format!("CQ TOTA CQ TOTA DE {sc} {sc} K");
+            let answer     = format!("{mycall} DE {sc} {sc} K");
+            let report     = format!("{mycall} {sr} {tower} K");
+            let ack_report = format!("73 DE {sc} <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),
+                contest_ex: format!("TU 73 K"),
+            };
+        }
+
+        // ── COTA (Castles on the Air): RST + castle reference ─────────────────
+        // Exchange pattern (sim activates a castle, calls CQ COTA):
+        //   SIM → CQ COTA CQ COTA DE <sim> <sim> K
+        //   USR → <sim> DE <my> K
+        //   SIM → <my> <rst> <castle_ref> K
+        //   USR → TU 73 K           ← acknowledge, QSO done
+        if style == QsoStyle::Cota {
+            let castle = &ex.activator_ref;
+            let cq         = format!("CQ COTA CQ COTA DE {sc} {sc} K");
+            let answer     = format!("{mycall} DE {sc} {sc} K");
+            let report     = format!("{mycall} {sr} {castle} K");
+            let ack_report = format!("73 DE {sc} <SK>");
+
+            return Self {
+                cq, answer, report, ack_report,
+                chat:       vec![],
+                sign_off:   String::new(),
+                contest_ex: format!("TU 73 K"),
             };
         }
 

@@ -45,7 +45,7 @@ pub struct Cli {
     #[arg(long)]
     pub who_starts: Option<WhoStarts>,
 
-    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | wwa-contest | wpx-contest | qtt-award | sst-contest | cq-dx | random
+    /// QSO style: ragchew | contest | dx-pileup | darc-cw-contest | mwc-contest | cwt-contest | wwa-contest | wpx-contest | qtt-award | sst-contest | cq-dx | pota | sota | tota | cota | random
     #[arg(long)]
     pub style: Option<QsoStyle>,
 
@@ -125,7 +125,7 @@ pub enum WhoStarts { Me, Sim }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
-pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, WwaContest, WpxContest, QttAward, SstContest, CqDx, Random }
+pub enum QsoStyle { Ragchew, Contest, DxPileup, DarcCwContest, MwcContest, CwtContest, WwaContest, WpxContest, QttAward, SstContest, CqDx, Pota, Sota, Tota, Cota, Random }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -410,7 +410,7 @@ pub fn print_help(lang: &crate::i18n::I18n) {
         ("      --farnsworth <WPM>",    "cli.help.farnsworth"),
         ("      --tone <HZ>",           "cli.help.tone"),
         ("      --who-starts <WHO>",    "cli.help.who_starts"),
-        ("      --style <STYLE>",        "cli.help.style"),
+        ("      --style <STYLE>",         "cli.help.style"),
         ("      --cwt-name <NAME>",     "cli.help.cwt_name"),
         ("      --cwt-nr <NR>",         "cli.help.cwt_nr"),
         ("      --my-dok <DOK>",        "cli.help.my_dok"),

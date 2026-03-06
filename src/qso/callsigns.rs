@@ -231,3 +231,144 @@ pub static WWA_CALLSIGNS: &[&str] = &[
 pub fn random_wwa_callsign<R: rand::Rng>(rng: &mut R) -> &'static str {
     WWA_CALLSIGNS.choose(rng).unwrap()
 }
+
+/// Generate a POTA (Parks on the Air) park reference based on the station's country.
+/// Format: {prefix}-{NNNN}  e.g. K-1234, DL-0042, VE-0567
+pub fn random_pota_ref<R: rand::Rng>(rng: &mut R, country: &str) -> String {
+    let prefix = match country {
+        "W"   => "K",
+        "VE"  => "VE",
+        "DL"  => "DL",
+        "G"   => "G",
+        "GM"  => "GM",
+        "EI"  => "EI",
+        "F"   => "F",
+        "I"   => "I",
+        "SM"  => "SM",
+        "OH"  => "OH",
+        "OE"  => "OE",
+        "PA"  => "PA",
+        "ON"  => "ON",
+        "SP"  => "SP",
+        "OK"  => "OK",
+        "HB9" => "HB",
+        "JA"  => "JA",
+        "VK"  => "VK",
+        "ZL"  => "ZL",
+        "LA"  => "LA",
+        "OZ"  => "OZ",
+        "LY"  => "LY",
+        "YL"  => "YL",
+        "ES"  => "ES",
+        "TF"  => "TF",
+        "UT"  => "UT",
+        "UA"  => "RA",
+        _     => "K",
+    };
+    let nr = rng.gen_range(1u32..=9999);
+    format!("{prefix}-{nr:04}")
+}
+
+/// Generate a SOTA (Summits on the Air) summit reference based on the station's country.
+/// Format: {association}/{region}-{NNN}  e.g. DL/AL-042, W6/NC-001
+pub fn random_sota_ref<R: rand::Rng>(rng: &mut R, country: &str) -> String {
+    let (assoc, region) = match country {
+        "W"   => ("W1",  "WR"),
+        "VE"  => ("VE3", "ON"),
+        "DL"  => ("DL",  "AL"),
+        "G"   => ("G",   "NW"),
+        "GM"  => ("GM",  "SS"),
+        "EI"  => ("EI",  "IE"),
+        "F"   => ("F",   "CO"),
+        "I"   => ("I",   "LO"),
+        "SM"  => ("SM",  "SD"),
+        "OH"  => ("OH",  "JS"),
+        "OE"  => ("OE",  "ST"),
+        "PA"  => ("PA",  "PA"),
+        "ON"  => ("ON",  "ON"),
+        "HB9" => ("HB",  "AG"),
+        "JA"  => ("JA",  "KG"),
+        "VK"  => ("VK3", "VC"),
+        "ZL"  => ("ZL3", "CB"),
+        "LA"  => ("LA",  "TM"),
+        "OZ"  => ("OZ",  "FYN"),
+        "LY"  => ("LY",  "KA"),
+        "YL"  => ("YL",  "RI"),
+        "ES"  => ("ES",  "HA"),
+        "TF"  => ("TF",  "SW"),
+        "SP"  => ("SP",  "BZ"),
+        "OK"  => ("OK",  "JM"),
+        "UT"  => ("UT",  "CR"),
+        _     => ("W1",  "WR"),
+    };
+    let nr = rng.gen_range(1u32..=999);
+    format!("{assoc}/{region}-{nr:03}")
+}
+
+/// Generate a COTA (Castles on the Air) castle reference based on the station's country.
+/// Format: {country_code}/CA-{NNN}  e.g. GB/CA-042, DL/CA-007
+pub fn random_cota_ref<R: rand::Rng>(rng: &mut R, country: &str) -> String {
+    let code = match country {
+        "W"   => "US",
+        "VE"  => "CA",
+        "DL"  => "DL",
+        "G"   | "GM" | "EI" => "GB",
+        "F"   => "FR",
+        "I"   => "IT",
+        "SM"  => "SE",
+        "OH"  => "FI",
+        "OE"  => "AT",
+        "PA"  => "NL",
+        "ON"  => "BE",
+        "SP"  => "PL",
+        "OK"  => "CZ",
+        "HB9" => "CH",
+        "JA"  => "JP",
+        "VK"  => "AU",
+        "ZL"  => "NZ",
+        "LA"  => "NO",
+        "OZ"  => "DK",
+        "LY"  => "LT",
+        "YL"  => "LV",
+        "ES"  => "EE",
+        "TF"  => "IS",
+        "UT"  => "UA",
+        _     => "GB",
+    };
+    let nr = rng.gen_range(1u32..=999);
+    format!("{code}/CA-{nr:03}")
+}
+
+/// Generate a TOTA (Towers on the Air) tower reference based on the station's country.
+/// Format: {country_code}-{NNNN}  e.g. US-0042, DL-0123  (wwtota.com style)
+pub fn random_tota_ref<R: rand::Rng>(rng: &mut R, country: &str) -> String {
+    let code = match country {
+        "W"   => "US",
+        "VE"  => "CA",
+        "DL"  => "DL",
+        "G"   | "GM" | "EI" => "GB",
+        "F"   => "FR",
+        "I"   => "IT",
+        "SM"  => "SE",
+        "OH"  => "FI",
+        "OE"  => "AT",
+        "PA"  => "NL",
+        "ON"  => "BE",
+        "SP"  => "PL",
+        "OK"  => "CZ",
+        "HB9" => "CH",
+        "JA"  => "JP",
+        "VK"  => "AU",
+        "ZL"  => "NZ",
+        "LA"  => "NO",
+        "OZ"  => "DK",
+        "LY"  => "LT",
+        "YL"  => "LV",
+        "ES"  => "EE",
+        "TF"  => "IS",
+        "UT"  => "UA",
+        _     => "US",
+    };
+    let nr = rng.gen_range(1u32..=9999);
+    format!("{code}-{nr:04}")
+}

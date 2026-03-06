@@ -53,6 +53,15 @@ mode       = "iambic_a"
 #   "darc_cw_contest" — DARC CW contest: RST + DOK exchange
 #   "mwc_contest"     — MWC sprint: RST + serial exchange
 #   "cwt_contest"     — CWT sprint: name + member-nr (or state/country) exchange
+#   "wwa_contest"     — WWA sprint: RST + serial (sent twice) + BK
+#   "wpx_contest"     — WPX contest: RST + serial (user sends RST + serial only)
+#   "qtt_award"       — QTT Award: RSN + name + QTH + pwr + ant; sign-off with 77
+#   "sst_contest"     — SST slow-speed sprint: name + SPC (no RST)
+#   "cq_dx"           — CQ DX: international DX QSO with RST + name + QTH
+#   "pota"            — Parks on the Air: activator sends RST + park reference (e.g. K-1234)
+#   "sota"            — Summits on the Air: activator uses /P, sends RST + summit ref (e.g. DL/AL-042)
+#   "tota"            — Towers on the Air: activator sends RST + tower reference (e.g. US-0042)
+#   "cota"            — Castles on the Air: activator sends RST + castle reference (e.g. GB/CA-042)
 #   "random"          — pick a style at random each QSO
 style        = "ragchew"
 # Simulated operator reaction delay range (milliseconds)
@@ -61,8 +70,13 @@ max_delay_ms = 2500
 # Probability of a simulated typo (0.0 – 1.0, e.g. 0.05 = 5%)
 typo_rate    = 0.05
 
-# ── CWT contest settings (only used when style = "cwt_contest") ───────────────
-# Your operator name sent in the CWT exchange (e.g. your first name or handle)
+# ── CWT / SST contest settings ────────────────────────────────────────────────
+# Your operator name sent in the CWT / SST exchange (e.g. your first name or handle)
 # cwt_name = "OP"
 # Your CWT member number (4 digits) OR state/country if not a member (e.g. "DL", "CA")
+# Also used as SPC in SST (e.g. "MA", "DL", "VK")
 # cwt_nr   = "NM"
+
+# ── DARC CW contest settings ──────────────────────────────────────────────────
+# Your DARC DOK (e.g. "P53").  Use "NM" if you are not a DARC member.
+# my_dok   = "NM"

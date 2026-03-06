@@ -13,7 +13,7 @@ use config::{AppConfig, Cli};
 use morse::{Timing, Decoder};
 use qso::{QsoEngine, QsoEvent};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -226,14 +226,10 @@ fn main() -> Result<()> {
     let sm = StatusMsg::new(&cfg.language);
 
     // ── Timing — two independent clocks ──────────────────────────────────────
-    // sim_timing  : drives audio playback of the simulator's CW
-    // user_timing : drives the decoder (your keying speed)
-    let sim_timing = if cfg.farnsworth_wpm > 0 {
-        Timing::farnsworth(cfg.sim_wpm, cfg.farnsworth_wpm)
-    } else {
-        Timing::from_wpm(cfg.sim_wpm)
-    };
-    let user_timing = Timing::from_wpm(cfg.user_wpm);
+    // sim_wpm_shared : runtime-adjustable SIM speed; QRS/QRQ commands update it
+    // user_timing    : drives the decoder (your keying speed)
+    let sim_wpm_shared = Arc::new(AtomicU8::new(cfg.sim_wpm));
+    let user_timing    = Timing::from_wpm(cfg.user_wpm);
 
     // ── Audio ─────────────────────────────────────────────────────────────────
     let audio = Arc::new(Mutex::new(
@@ -286,11 +282,13 @@ fn main() -> Result<()> {
     let audio_busy_audio = Arc::clone(&audio_busy);
     let (tx_audio,      rx_audio)      = std::sync::mpsc::channel::<String>();
     let (tx_audio_done, rx_audio_done) = std::sync::mpsc::channel::<()>();
-    let audio_arc    = Arc::clone(&audio);
-    let sim_timing_c = sim_timing;
+    let audio_arc     = Arc::clone(&audio);
+    let sim_wpm_audio = Arc::clone(&sim_wpm_shared);
     thread::spawn(move || {
         while let Ok(text) = rx_audio.recv() {
-            let seq = morse::encode(&text, &sim_timing_c);
+            let wpm    = sim_wpm_audio.load(Ordering::Relaxed);
+            let timing = Timing::from_wpm(wpm);
+            let seq    = morse::encode(&text, &timing);
             let mut a = audio_arc.lock().unwrap();
             let _ = a.play_sequence(&seq);
             drop(a); // release mutex before signalling
@@ -550,11 +548,65 @@ fn main() -> Result<()> {
             false
         };
 
-        let input_to_pass = if end_of_over {
+        // ── QRS / QRQ speed adjustment ─────────────────────────────────────────
+        // Only fires at end-of-over — never on mid-over word boundaries — so a
+        // callsign over like "SM5XY DE DD6DS K" is never mistaken for QRS.
+        // QRS/QRQ is STRIPPED from the over; remaining words (callsign, PSE, K)
+        // are still passed to the QSO engine so the QSO advances normally.
+        //
+        // Accepted patterns (any order, with or without surrounding words):
+        //   "QRS K"                  "QRQ K"
+        //   "PSE QRS K"              "PSE QRQ K"
+        //   "QRS PSE K"              "QRQ PSE K"
+        //   "SM5XY DE DD6DS QRS K"   "SM5XY DE DD6DS QRQ K"
+        //   "SM5XY DE DD6DS PSE QRS K"
+        let mut input_to_pass = if end_of_over {
             user_tx_acc.trim().to_uppercase()
         } else {
             String::new()
         };
+
+        if !input_to_pass.is_empty() {
+            let has_qrs = input_to_pass.split_whitespace().any(|w| w == "QRS");
+            let has_qrq = !has_qrs && input_to_pass.split_whitespace().any(|w| w == "QRQ");
+            if has_qrs || has_qrq {
+                let filter_word = if has_qrs { "QRS" } else { "QRQ" };
+                let new_wpm = if has_qrs {
+                    sim_wpm_shared.load(Ordering::Relaxed).saturating_sub(3).max(5)
+                } else {
+                    sim_wpm_shared.load(Ordering::Relaxed).saturating_add(3).min(50)
+                };
+                sim_wpm_shared.store(new_wpm, Ordering::Relaxed);
+                state.lock().unwrap().sim_wpm = new_wpm;
+                // Strip QRS/QRQ so the rest of the over reaches the engine
+                let stripped: Vec<&str> = input_to_pass.split_whitespace()
+                    .filter(|&w| w != filter_word).collect();
+                input_to_pass = stripped.join(" ");
+
+                // Only send an explicit QRS/QRQ ack when the over contained
+                // nothing else meaningful (standalone speed command).
+                // If the user also sent a callsign or exchange content the
+                // engine will reply at the new — already slower — speed,
+                // which serves as the implicit acknowledgment.
+                let filler = ["K", "BK", "AR", "KN", "+", "(", "PSE", "DE"];
+                let has_content = input_to_pass.split_whitespace()
+                    .any(|w| !filler.contains(&w));
+                if !has_content {
+                    let ack = if has_qrs { "QRS QRS" } else { "QRQ QRQ" };
+                    {
+                        let mut st = state.lock().unwrap();
+                        if !cfg.no_decode {
+                            st.sim_log.push(ack.to_string());
+                            if st.sim_log.len() > 50 { st.sim_log.remove(0); }
+                        }
+                        st.status = sm.transmitting.into();
+                    }
+                    audio_busy.store(true, Ordering::Relaxed);
+                    let _ = tx_audio.send(ack.to_string());
+                }
+            }
+        }
+
         let event = engine.tick(&input_to_pass);
         if end_of_over {
             user_tx_acc.clear();

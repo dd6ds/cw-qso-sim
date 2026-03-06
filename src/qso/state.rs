@@ -174,9 +174,11 @@ impl QsoEngine {
                         // skip the separate SignOff phase and wait for the user's 73.
                         // WWA: same pattern — ack_report is "R TU 73 <SK>", then wait for user 73.
                         QsoStyle::MwcContest | QsoStyle::WwaContest => Phase::WaitFor73,
-                        // CWT / WPX / SST / CqDx: ack_report is the final transmission — QSO done immediately.
+                        // CWT / WPX / SST / CqDx / POTA / SOTA / TOTA: ack_report is the
+                        // final transmission — QSO done immediately.
                         QsoStyle::CwtContest | QsoStyle::WpxContest | QsoStyle::SstContest
-                        | QsoStyle::CqDx => Phase::Done,
+                        | QsoStyle::CqDx
+                        | QsoStyle::Pota | QsoStyle::Sota | QsoStyle::Tota | QsoStyle::Cota => Phase::Done,
                         QsoStyle::Contest | QsoStyle::DxPileup | QsoStyle::DarcCwContest => Phase::SignOff,
                         _ => Phase::Chat { turn: 0 },
                     };
@@ -295,10 +297,11 @@ impl QsoEngine {
     pub fn demo_response(&self) -> Option<String> {
         match &self.phase {
             // User answers the SIM's CQ
-            // SST: just send callsign (no DE, no sim call prefix)
+            // SST: just callsign; POTA/TOTA: callsign with DE; SOTA: /P suffix on sim call
             Phase::WaitForMyAnswer => Some(match self.style {
                 QsoStyle::SstContest => format!("{} K", self.mycall),
-                _                   => format!("{} DE {} KN", self.exchange.sim_call, self.mycall),
+                QsoStyle::Sota       => format!("{}/P DE {} K", self.exchange.sim_call, self.mycall),
+                _                    => format!("{} DE {} K", self.exchange.sim_call, self.mycall),
             }),
             // User sends CQ (when who_starts = me)
             Phase::ISendCq => Some(format!("CQ CQ DE {} K", self.mycall)),
@@ -338,6 +341,14 @@ impl QsoEngine {
                     QsoStyle::SstContest => {
                         // SST: greeting + SIM name + user name + user SPC (no RST!)
                         format!("GE {} OP MA", &self.exchange.sim_name)
+                    }
+                    QsoStyle::Pota | QsoStyle::Tota | QsoStyle::Cota => {
+                        // Hunter just sends RST acknowledgment
+                        format!("TU 599 K")
+                    }
+                    QsoStyle::Sota => {
+                        // SOTA hunter acknowledges with RST
+                        format!("TU 599 K")
                     }
                     _ => {
                         // Ragchew

@@ -11,7 +11,9 @@ Supports iambic paddles (VBand USB HID, ATtiny85/Digispark MIDI), straight keys,
 
 ## Features
 
-- **QSO engine** — ragchew, contest, DX pile-up, DARC CW, MWC, CWT, WWA, WPX, QTT, SST, and random styles
+- **QSO engine** — ragchew, contest, DX pile-up, DARC CW, MWC, CWT, WWA, WPX, QTT, SST, CQ DX, POTA, SOTA, TOTA, COTA, and random styles
+- **Live speed control** — send `QRS` or `QRQ` at any time to adjust the simulator speed on the fly
+- **Repeat request** — send `?` to make the simulator repeat its last transmission
 - **Iambic keyer** — mode A and B, straight key, or keyboard text-input fallback
 - **Sidetone** — real-time audio feedback via CPAL
 - **Farnsworth timing** — stretch inter-character gaps for beginners
@@ -79,7 +81,8 @@ QSO
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
     --style <STYLE>          ragchew | contest | dx-pileup | darc-cw-contest |
                              mwc-contest | cwt-contest | wwa-contest | wpx-contest |
-                             qtt-award | sst-contest | random
+                             qtt-award | sst-contest | cq-dx |
+                             pota | sota | tota | cota | random
     --cwt-name <NAME>        Your operator name for CWT / SST exchange (e.g. DENNIS)
     --cwt-nr <NR>            Your CWT member nr or state/SPC (e.g. 1234, DL, MA)
     --my-dok <DOK>           Your DARC DOK for darc-cw-contest (e.g. P53; NM if non-member)
@@ -130,7 +133,8 @@ mode       = "iambic_a"      # iambic_a | iambic_b | straight
 
 [qso]
 style        = "ragchew"     # ragchew | contest | dx_pileup | darc_cw_contest | mwc_contest
-                             # cwt_contest | wwa_contest | wpx_contest | qtt_award | sst_contest | random
+                             # cwt_contest | wwa_contest | wpx_contest | qtt_award | sst_contest
+                             # cq_dx | pota | sota | tota | cota | random
 min_delay_ms = 800           # simulated operator reaction time (ms)
 max_delay_ms = 2500
 typo_rate    = 0.05          # probability of a simulated typo (0.0 – 1.0)
@@ -138,6 +142,63 @@ typo_rate    = 0.05          # probability of a simulated typo (0.0 – 1.0)
 # cwt_nr     = "DL"          # your CWT member nr or state/SPC (e.g. "1234", "DL", "MA")
 # my_dok     = "P53"         # your DARC DOK        (used by darc-cw-contest; "NM" if non-member)
 ```
+
+---
+
+## In-QSO commands
+
+These Q-codes and prosigns can be sent **at any time during a QSO** — they work in both hardware-keyer and keyboard text-input modes.
+
+### `?` — Repeat last transmission (IMI)
+
+Send a standalone `?` (the IMI prosign `..--..`) to ask the simulator to repeat whatever it last sent.
+Useful when you missed a callsign, RST, or exchange element.
+
+```
+SIM:  SM5XY 599 K-0042 K
+YOU:  ?
+SIM:  SM5XY 599 K-0042 K     ← repeated at the same speed
+```
+
+> In keyboard mode just type `?` and press **Enter**.
+
+---
+
+### `QRS` — Send more slowly
+
+Send `QRS` (alone or mixed into your over) to reduce the simulator TX speed by **3 WPM**.
+The change takes effect immediately — the simulator's next transmission uses the new speed.
+Minimum speed: **5 WPM**.
+
+| What you send | What happens |
+|---|---|
+| `QRS K` | SIM slows down 3 WPM, replies `QRS QRS` |
+| `PSE QRS K` | Same — `PSE` is ignored |
+| `SM5XY DE DD6DS QRS K` | SIM slows down, then sends its exchange at the new speed |
+
+Send `QRS K` multiple times to keep stepping the speed down.
+
+---
+
+### `QRQ` — Send faster
+
+Send `QRQ` to increase the simulator TX speed by **3 WPM**.
+Maximum speed: **50 WPM**.
+
+| What you send | What happens |
+|---|---|
+| `QRQ K` | SIM speeds up 3 WPM, replies `QRQ QRQ` |
+| `PSE QRQ K` | Same |
+| `SM5XY DE DD6DS QRQ K` | SIM speeds up, then sends its exchange at the new speed |
+
+---
+
+### Notes
+
+- The current SIM speed is always shown in the **WPM** field of the TUI — watch it change live.
+- `QRS` / `QRQ` do **not** interrupt or restart the QSO; the phase continues from where it was.
+- When `QRS` or `QRQ` appears in the same over as your callsign (e.g. `SM5XY DE DD6DS QRS K`), the simulator sends its normal exchange at the new speed — no separate `QRS QRS` acknowledgment is sent.
+- `QRP` is **not** a speed command — in CW it means *reduce power*. Use `QRS` to slow down and `QRQ` to speed up.
 
 ---
 
@@ -523,6 +584,11 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 | WPX Contest | `wpx-contest` | RST + serial | User sends **only** RST + serial (no callsign) |
 | QTT Award | `qtt-award` | RSN + Name + QTH + Pwr + Ant | RSN instead of RST; signs off with **77** |
 | SST Contest | `sst-contest` | Name + SPC (no RST!) | Slow Speed CW; uses `--cwt-name` / `--cwt-nr` as name/SPC |
+| CQ DX | `cq-dx` | RST + Name + QTH | International DX QSO format |
+| POTA | `pota` | RST + park reference (e.g. `K-1234`) | Parks on the Air — activator calls CQ POTA |
+| SOTA | `sota` | RST + summit reference (e.g. `DL/AL-042`) | Summits on the Air — activator uses `/P` suffix |
+| TOTA | `tota` | RST + tower reference (e.g. `US-0042`) | Towers on the Air (wwtota.com) |
+| COTA | `cota` | RST + castle reference (e.g. `GB/CA-042`) | Castles on the Air |
 | Random | `random` | (varies) | Picks a random style each QSO |
 
 ### Demo commands — preview any style without a paddle
@@ -551,6 +617,21 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 
 # SST Contest  (Slow Speed CW; name + SPC, no RST)
 ./cw-qso-sim --demo --style sst-contest --mycall DD6DS --cwt-name DENNIS --cwt-nr DL
+
+# CQ DX  (international DX QSO)
+./cw-qso-sim --demo --style cq-dx --mycall DD6DS
+
+# POTA  (Parks on the Air — activator sends RST + park reference)
+./cw-qso-sim --demo --style pota --mycall DD6DS
+
+# SOTA  (Summits on the Air — activator uses /P, sends RST + summit reference)
+./cw-qso-sim --demo --style sota --mycall DD6DS
+
+# TOTA  (Towers on the Air — activator sends RST + tower reference)
+./cw-qso-sim --demo --style tota --mycall DD6DS
+
+# COTA  (Castles on the Air — activator sends RST + castle reference)
+./cw-qso-sim --demo --style cota --mycall DD6DS
 ```
 
 
