@@ -282,12 +282,20 @@ fn main() -> Result<()> {
     let audio_busy_audio = Arc::clone(&audio_busy);
     let (tx_audio,      rx_audio)      = std::sync::mpsc::channel::<String>();
     let (tx_audio_done, rx_audio_done) = std::sync::mpsc::channel::<()>();
-    let audio_arc     = Arc::clone(&audio);
-    let sim_wpm_audio = Arc::clone(&sim_wpm_shared);
+    let audio_arc        = Arc::clone(&audio);
+    let sim_wpm_audio    = Arc::clone(&sim_wpm_shared);
+    let farnsworth_wpm   = cfg.farnsworth_wpm;   // fixed at startup; captured by audio thread
     thread::spawn(move || {
         while let Ok(text) = rx_audio.recv() {
             let wpm    = sim_wpm_audio.load(Ordering::Relaxed);
-            let timing = Timing::from_wpm(wpm);
+            // Apply Farnsworth timing when requested: characters play at full `wpm`
+            // speed but inter-character / word gaps are stretched to the slower
+            // Farnsworth effective WPM, giving more decoding time between characters.
+            let timing = if farnsworth_wpm > 0 && farnsworth_wpm < wpm {
+                Timing::farnsworth(wpm, farnsworth_wpm)
+            } else {
+                Timing::from_wpm(wpm)
+            };
             let seq    = morse::encode(&text, &timing);
             let mut a = audio_arc.lock().unwrap();
             let _ = a.play_sequence(&seq);

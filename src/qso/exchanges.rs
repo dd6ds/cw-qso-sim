@@ -5,7 +5,7 @@ use super::callsigns::{
     random_dok, random_rst, random_rig, random_ant, random_pwr,
     random_pota_ref, random_sota_ref, random_tota_ref, random_cota_ref,
 };
-use crate::config::QsoStyle;
+use crate::config::{QsoStyle, WhoStarts};
 
 pub struct SimExchange {
     pub sim_call:       String,
@@ -95,8 +95,11 @@ impl QsoScript {
     /// It appears in the MWC contest_ex hint and is used as the number
     /// the user should send back to the sim station.
     /// `cwt_name` / `cwt_nr` are the user's own CWT exchange fields (name + member nr or state/country).
+    /// `who_starts` / `my_ref` control activator-role handling for POTA/SOTA/TOTA/COTA:
+    /// when `who_starts == Me` the user IS the activator and sends the reference.
     pub fn build(mycall: &str, ex: &SimExchange, style: QsoStyle, my_rst: &str, my_serial: u32,
-                 cwt_name: &str, cwt_nr: &str, my_dok: &str) -> Self {
+                 cwt_name: &str, cwt_nr: &str, my_dok: &str,
+                 who_starts: WhoStarts, my_ref: &str) -> Self {
         let sc  = &ex.sim_call;
         let sn  = &ex.sim_name;
         let sq  = &ex.sim_qth;
@@ -332,20 +335,37 @@ impl QsoScript {
         }
 
         // ── POTA (Parks on the Air): RST + park reference ─────────────────────
-        // Exchange pattern (sim activates a park, calls CQ POTA):
+        // When SIM starts (SIM is activator):
         //   SIM → CQ POTA CQ POTA DE <sim> <sim> K
         //   USR → <sim> DE <my> K
-        //   SIM → <my> <rst> <park_ref> K
-        //   USR → TU 73 K           ← acknowledge, QSO done
+        //   SIM → <my> <rst> <park_ref> K      ← SIM has the ref
+        //   USR → TU 73 K
+        // When USER starts (USER is activator):
+        //   USR → CQ POTA CQ POTA DE <my> <my> K
+        //   SIM → <my> DE <sim> <sim> K
+        //   SIM → <my> <rst> K                 ← hunter: RST only, no ref
+        //   USR → <sim> <rst> <my_park_ref> K  ← user sends their own park ref
         if style == QsoStyle::Pota {
-            let park = &ex.activator_ref;
             let cq         = format!("CQ POTA CQ POTA DE {sc} {sc} K");
             let answer     = format!("{mycall} DE {sc} {sc} K");
-            let report     = format!("{mycall} {sr} {park} K");
             let ack_report = format!("73 DE {sc} <SK>");
 
+            if who_starts == WhoStarts::Me {
+                // User is the park activator — SIM is the hunter (no ref to send)
+                return Self {
+                    cq, answer,
+                    report:     format!("{mycall} {sr} K"),
+                    ack_report,
+                    chat:       vec![],
+                    sign_off:   String::new(),
+                    contest_ex: format!("{sc} {my_rst} {my_ref} K"),
+                };
+            }
+            let park = &ex.activator_ref;
             return Self {
-                cq, answer, report, ack_report,
+                cq, answer,
+                report:     format!("{mycall} {sr} {park} K"),
+                ack_report,
                 chat:       vec![],
                 sign_off:   String::new(),
                 contest_ex: format!("TU 73 K"),
@@ -353,22 +373,39 @@ impl QsoScript {
         }
 
         // ── SOTA (Summits on the Air): RST + summit reference ─────────────────
-        // SIM operates portable (/P) from a summit.
-        // Exchange pattern:
+        // When SIM starts (SIM is activator /P):
         //   SIM → CQ SOTA DE <sim>/P <sim>/P K
         //   USR → <sim>/P DE <my> K
-        //   SIM → <my> <rst> <summit_ref> K
-        //   USR → TU 73 K           ← acknowledge, QSO done
+        //   SIM → <my> <rst> <summit_ref> K    ← SIM has the ref
+        //   USR → TU 73 K
+        // When USER starts (USER is activator /P):
+        //   USR → CQ SOTA DE <my>/P <my>/P K
+        //   SIM → <my>/P DE <sim> <sim> K      ← SIM addresses user with /P
+        //   SIM → <my> <rst> K                 ← hunter: RST only, no ref
+        //   USR → <sim> <rst> <my_summit_ref> K ← user sends their own summit ref
         if style == QsoStyle::Sota {
-            let summit = &ex.activator_ref;
-            let sp         = format!("{sc}/P");  // portable suffix
-            let cq         = format!("CQ SOTA DE {sp} {sp} K");
-            let answer     = format!("{mycall} DE {sp} {sp} K");
-            let report     = format!("{mycall} {sr} {summit} K");
-            let ack_report = format!("73 DE {sp} <SK>");
+            let sp  = format!("{sc}/P");  // portable suffix for SIM when activating
+            let cq  = format!("CQ SOTA DE {sp} {sp} K");
 
+            if who_starts == WhoStarts::Me {
+                // User is the summit activator — SIM is the hunter (no ref to send)
+                let myp = format!("{mycall}/P");  // user's portable suffix
+                return Self {
+                    cq,
+                    answer:     format!("{myp} DE {sc} {sc} K"),  // SIM addresses user/P
+                    report:     format!("{mycall} {sr} K"),        // hunter: RST only
+                    ack_report: format!("73 DE {sc} <SK>"),        // SIM signs off without /P
+                    chat:       vec![],
+                    sign_off:   String::new(),
+                    contest_ex: format!("{sc} {my_rst} {my_ref} K"),
+                };
+            }
+            let summit = &ex.activator_ref;
             return Self {
-                cq, answer, report, ack_report,
+                cq,
+                answer:     format!("{mycall} DE {sp} {sp} K"),
+                report:     format!("{mycall} {sr} {summit} K"),
+                ack_report: format!("73 DE {sp} <SK>"),
                 chat:       vec![],
                 sign_off:   String::new(),
                 contest_ex: format!("TU 73 K"),
@@ -376,20 +413,36 @@ impl QsoScript {
         }
 
         // ── TOTA (Towers on the Air): RST + tower reference ───────────────────
-        // Exchange pattern (sim activates a tower, calls CQ TOTA):
+        // When SIM starts (SIM is activator):
         //   SIM → CQ TOTA CQ TOTA DE <sim> <sim> K
         //   USR → <sim> DE <my> K
-        //   SIM → <my> <rst> <tower_ref> K
-        //   USR → TU 73 K           ← acknowledge, QSO done
+        //   SIM → <my> <rst> <tower_ref> K    ← SIM has the ref
+        //   USR → TU 73 K
+        // When USER starts (USER is activator):
+        //   USR → CQ TOTA CQ TOTA DE <my> <my> K
+        //   SIM → <my> DE <sim> <sim> K
+        //   SIM → <my> <rst> K                ← hunter: RST only, no ref
+        //   USR → <sim> <rst> <my_tower_ref> K ← user sends their own tower ref
         if style == QsoStyle::Tota {
-            let tower = &ex.activator_ref;
             let cq         = format!("CQ TOTA CQ TOTA DE {sc} {sc} K");
             let answer     = format!("{mycall} DE {sc} {sc} K");
-            let report     = format!("{mycall} {sr} {tower} K");
             let ack_report = format!("73 DE {sc} <SK>");
 
+            if who_starts == WhoStarts::Me {
+                return Self {
+                    cq, answer,
+                    report:     format!("{mycall} {sr} K"),
+                    ack_report,
+                    chat:       vec![],
+                    sign_off:   String::new(),
+                    contest_ex: format!("{sc} {my_rst} {my_ref} K"),
+                };
+            }
+            let tower = &ex.activator_ref;
             return Self {
-                cq, answer, report, ack_report,
+                cq, answer,
+                report:     format!("{mycall} {sr} {tower} K"),
+                ack_report,
                 chat:       vec![],
                 sign_off:   String::new(),
                 contest_ex: format!("TU 73 K"),
@@ -397,20 +450,36 @@ impl QsoScript {
         }
 
         // ── COTA (Castles on the Air): RST + castle reference ─────────────────
-        // Exchange pattern (sim activates a castle, calls CQ COTA):
+        // When SIM starts (SIM is activator):
         //   SIM → CQ COTA CQ COTA DE <sim> <sim> K
         //   USR → <sim> DE <my> K
-        //   SIM → <my> <rst> <castle_ref> K
-        //   USR → TU 73 K           ← acknowledge, QSO done
+        //   SIM → <my> <rst> <castle_ref> K    ← SIM has the ref
+        //   USR → TU 73 K
+        // When USER starts (USER is activator):
+        //   USR → CQ COTA CQ COTA DE <my> <my> K
+        //   SIM → <my> DE <sim> <sim> K
+        //   SIM → <my> <rst> K                 ← hunter: RST only, no ref
+        //   USR → <sim> <rst> <my_castle_ref> K ← user sends their own castle ref
         if style == QsoStyle::Cota {
-            let castle = &ex.activator_ref;
             let cq         = format!("CQ COTA CQ COTA DE {sc} {sc} K");
             let answer     = format!("{mycall} DE {sc} {sc} K");
-            let report     = format!("{mycall} {sr} {castle} K");
             let ack_report = format!("73 DE {sc} <SK>");
 
+            if who_starts == WhoStarts::Me {
+                return Self {
+                    cq, answer,
+                    report:     format!("{mycall} {sr} K"),
+                    ack_report,
+                    chat:       vec![],
+                    sign_off:   String::new(),
+                    contest_ex: format!("{sc} {my_rst} {my_ref} K"),
+                };
+            }
+            let castle = &ex.activator_ref;
             return Self {
-                cq, answer, report, ack_report,
+                cq, answer,
+                report:     format!("{mycall} {sr} {castle} K"),
+                ack_report,
                 chat:       vec![],
                 sign_off:   String::new(),
                 contest_ex: format!("TU 73 K"),

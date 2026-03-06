@@ -3,7 +3,10 @@ use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use std::time::{Duration, Instant};
 use crate::config::{AppConfig, QsoStyle, WhoStarts};
-use super::callsigns::random_rst;
+use super::callsigns::{
+    random_rst, country_from_callsign,
+    random_pota_ref, random_sota_ref, random_tota_ref, random_cota_ref,
+};
 use super::exchanges::{QsoScript, SimExchange};
 
 /// Events produced by the engine for the UI / audio layer
@@ -47,6 +50,10 @@ pub struct QsoEngine {
     pub style:   QsoStyle,
     pub typo_rate: f64,
     pub my_dok:  String,
+    /// Whether the user starts the QSO (controls activator role in POTA/SOTA/TOTA/COTA)
+    pub who_starts: WhoStarts,
+    /// The user's own activator reference (park/summit/tower/castle) when who_starts=Me
+    my_activator_ref: String,
 }
 
 impl QsoEngine {
@@ -57,8 +64,27 @@ impl QsoEngine {
         let mut rng = SmallRng::from_entropy();
         let ex      = SimExchange::generate(&mut rng, cfg.qso_style);
         let my_rst  = random_rst(&mut rng).to_string();
-        let script  = QsoScript::build(&cfg.mycall, &ex, cfg.qso_style, &my_rst, my_serial,
-                                       &cfg.cwt_name, &cfg.cwt_nr, &cfg.my_dok);
+
+        // When the user is the activator, generate their own park/summit/tower/castle ref
+        // based on their callsign prefix so the reference country matches their call.
+        let my_activator_ref = if cfg.who_starts == WhoStarts::Me {
+            let my_country = country_from_callsign(&cfg.mycall);
+            match cfg.qso_style {
+                QsoStyle::Pota => random_pota_ref(&mut rng, my_country),
+                QsoStyle::Sota => random_sota_ref(&mut rng, my_country),
+                QsoStyle::Tota => random_tota_ref(&mut rng, my_country),
+                QsoStyle::Cota => random_cota_ref(&mut rng, my_country),
+                _              => String::new(),
+            }
+        } else {
+            String::new()
+        };
+
+        let script = QsoScript::build(
+            &cfg.mycall, &ex, cfg.qso_style, &my_rst, my_serial,
+            &cfg.cwt_name, &cfg.cwt_nr, &cfg.my_dok,
+            cfg.who_starts, &my_activator_ref,
+        );
 
         let phase = match cfg.who_starts {
             WhoStarts::Sim => Phase::Init,
@@ -76,6 +102,8 @@ impl QsoEngine {
             style:  cfg.qso_style,
             typo_rate: cfg.typo_rate,
             my_dok: cfg.my_dok.clone(),
+            who_starts: cfg.who_starts,
+            my_activator_ref,
             script,
             exchange: ex,
             rng,
@@ -139,7 +167,15 @@ impl QsoEngine {
                 if now >= self.next_tx_at {
                     let tx = self.maybe_typo(&self.script.answer.clone());
                     self.last_tx = tx.clone();
-                    self.phase   = Phase::SimSendsReport;
+                    // When user is the activator (POTA/SOTA/TOTA/COTA + who_starts=Me)
+                    // the SIM just called back with its callsign — skip SimSendsReport
+                    // and wait for the user to send their exchange (RST + reference).
+                    self.phase = match (self.who_starts, self.style) {
+                        (WhoStarts::Me,
+                         QsoStyle::Pota | QsoStyle::Sota | QsoStyle::Tota | QsoStyle::Cota)
+                            => Phase::WaitMyReport,
+                        _ => Phase::SimSendsReport,
+                    };
                     self.schedule_delay();
                     Some(QsoEvent::SimTransmit(tx))
                 } else { None }
@@ -303,8 +339,14 @@ impl QsoEngine {
                 QsoStyle::Sota       => format!("{}/P DE {} K", self.exchange.sim_call, self.mycall),
                 _                    => format!("{} DE {} K", self.exchange.sim_call, self.mycall),
             }),
-            // User sends CQ (when who_starts = me)
-            Phase::ISendCq => Some(format!("CQ CQ DE {} K", self.mycall)),
+            // User sends CQ (when who_starts = me) — format matches the style
+            Phase::ISendCq => Some(match self.style {
+                QsoStyle::Pota => format!("CQ POTA CQ POTA DE {0} {0} K", self.mycall),
+                QsoStyle::Sota => format!("CQ SOTA DE {0}/P {0}/P K",      self.mycall),
+                QsoStyle::Tota => format!("CQ TOTA CQ TOTA DE {0} {0} K", self.mycall),
+                QsoStyle::Cota => format!("CQ COTA CQ COTA DE {0} {0} K", self.mycall),
+                _              => format!("CQ CQ DE {0} {0} K",            self.mycall),
+            }),
             // User sends their exchange
             Phase::WaitMyReport => {
                 let sc = &self.exchange.sim_call;
@@ -342,13 +384,14 @@ impl QsoEngine {
                         // SST: greeting + SIM name + user name + user SPC (no RST!)
                         format!("GE {} OP MA", &self.exchange.sim_name)
                     }
-                    QsoStyle::Pota | QsoStyle::Tota | QsoStyle::Cota => {
-                        // Hunter just sends RST acknowledgment
-                        format!("TU 599 K")
-                    }
-                    QsoStyle::Sota => {
-                        // SOTA hunter acknowledges with RST
-                        format!("TU 599 K")
+                    QsoStyle::Pota | QsoStyle::Sota | QsoStyle::Tota | QsoStyle::Cota => {
+                        if self.who_starts == WhoStarts::Me {
+                            // User is the activator — send RST + own reference to the hunter
+                            format!("{sc} {} {} K", self.my_rst, self.my_activator_ref)
+                        } else {
+                            // User is the hunter — just acknowledge RST
+                            format!("TU 599 K")
+                        }
                     }
                     _ => {
                         // Ragchew

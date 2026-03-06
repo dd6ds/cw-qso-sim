@@ -339,6 +339,77 @@ pub fn random_cota_ref<R: rand::Rng>(rng: &mut R, country: &str) -> String {
     format!("{code}/CA-{nr:03}")
 }
 
+/// Derive a country code from a callsign for use with the random_*_ref generators.
+/// Handles the most common amateur radio callsign prefixes worldwide.
+pub fn country_from_callsign(call: &str) -> &'static str {
+    let c = call.to_uppercase();
+    // German prefixes: DA..DP series (all 2-letter prefixes starting with D)
+    if c.starts_with("DA") || c.starts_with("DB") || c.starts_with("DC")
+        || c.starts_with("DD") || c.starts_with("DE") || c.starts_with("DF")
+        || c.starts_with("DG") || c.starts_with("DH") || c.starts_with("DJ")
+        || c.starts_with("DK") || c.starts_with("DL") || c.starts_with("DM")
+        || c.starts_with("DO") || c.starts_with("DP") { "DL" }
+    // Canada (VE/VA/VO/VY — must come before VK)
+    else if c.starts_with("VE") || c.starts_with("VA")
+         || c.starts_with("VO") || c.starts_with("VY") { "VE" }
+    // Australia
+    else if c.starts_with("VK") { "VK" }
+    // Poland
+    else if c.starts_with("SP") { "SP" }
+    // Sweden
+    else if c.starts_with("SM") || c.starts_with("SA")
+         || c.starts_with("SE") || c.starts_with("SK") { "SM" }
+    // Finland
+    else if c.starts_with("OH") { "OH" }
+    // Austria
+    else if c.starts_with("OE") { "OE" }
+    // Belgium
+    else if c.starts_with("ON") { "ON" }
+    // Denmark
+    else if c.starts_with("OZ") { "OZ" }
+    // Czech Republic
+    else if c.starts_with("OK") { "OK" }
+    // Netherlands
+    else if c.starts_with("PA") || c.starts_with("PD")
+         || c.starts_with("PE") || c.starts_with("PH") { "PA" }
+    // Spain
+    else if c.starts_with("EA") { "EA" }
+    // Switzerland
+    else if c.starts_with("HB") { "HB9" }
+    // Norway
+    else if c.starts_with("LA") || c.starts_with("LB") { "LA" }
+    // Lithuania
+    else if c.starts_with("LY") { "LY" }
+    // Latvia
+    else if c.starts_with("YL") { "YL" }
+    // Estonia
+    else if c.starts_with("ES") { "ES" }
+    // Iceland
+    else if c.starts_with("TF") { "TF" }
+    // Ukraine
+    else if c.starts_with("UT") || c.starts_with("UR") { "UT" }
+    // New Zealand
+    else if c.starts_with("ZL") { "ZL" }
+    // Japan
+    else if c.starts_with("JA") || c.starts_with("JH")
+         || c.starts_with("JR") || c.starts_with("JO") { "JA" }
+    // Ireland
+    else if c.starts_with("EI") { "EI" }
+    // Scotland (GM before single G)
+    else if c.starts_with("GM") { "GM" }
+    // United Kingdom
+    else if c.starts_with('G') || c.starts_with('M') { "G" }
+    // France
+    else if c.starts_with('F') { "F" }
+    // Italy
+    else if c.starts_with('I') { "I" }
+    // USA: A*, K*, N*, W* (must come after two-letter prefixes handled above)
+    else if c.starts_with('A') || c.starts_with('K')
+         || c.starts_with('N') || c.starts_with('W') { "W" }
+    // Fallback — use DL so refs are always well-formed
+    else { "DL" }
+}
+
 /// Generate a TOTA (Towers on the Air) tower reference based on the station's country.
 /// Format: {country_code}-{NNNN}  e.g. US-0042, DL-0123  (wwtota.com style)
 pub fn random_tota_ref<R: rand::Rng>(rng: &mut R, country: &str) -> String {
