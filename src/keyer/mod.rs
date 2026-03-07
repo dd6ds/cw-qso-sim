@@ -4,6 +4,8 @@ pub mod keyboard;
 pub mod vband;
 #[cfg(feature = "keyer-attiny85")]
 pub mod attiny85;
+#[cfg(feature = "keyer-pico2")]
+pub mod pico2;
 #[cfg(feature = "keyer-nano")]
 pub mod nano;
 #[cfg(feature = "keyer-winkeyer")]
@@ -33,6 +35,11 @@ pub fn list_ports() -> Vec<String> {
     #[cfg(feature = "keyer-attiny85")]
     {
         let mut m = attiny85::list_midi_ports();
+        out.append(&mut m);
+    }
+    #[cfg(feature = "keyer-pico2")]
+    {
+        let mut m = pico2::list_midi_ports();
         out.append(&mut m);
     }
     #[cfg(feature = "keyer-nano")]
@@ -79,7 +86,7 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
     use crate::config::AdapterType;
 
     // Compile-time shortcut: no hardware features → skip scanning entirely.
-    #[cfg(not(any(feature = "keyer-vband", feature = "keyer-attiny85", feature = "keyer-nano")))]
+    #[cfg(not(any(feature = "keyer-vband", feature = "keyer-attiny85", feature = "keyer-pico2", feature = "keyer-nano")))]
     {
         log::info!("[autodetect] No hardware keyer features compiled in — using keyboard text-input mode");
         return AdapterType::Keyboard;
@@ -130,6 +137,21 @@ pub fn autodetect_adapter() -> crate::config::AdapterType {
             if found {
                 log::info!("[autodetect] ATtiny85 MIDI found");
                 return AdapterType::Attiny85;
+            }
+        }
+    }
+
+    #[cfg(feature = "keyer-pico2")]
+    {
+        use midir::MidiInput;
+        if let Ok(mi) = MidiInput::new("cw-qso-sim-detect") {
+            let found = mi.ports().iter().any(|p| {
+                let name = mi.port_name(p).unwrap_or_default().to_lowercase();
+                pico2::KNOWN_NAMES.iter().any(|n| name.contains(n))
+            });
+            if found {
+                log::info!("[autodetect] Raspberry Pi Pico 2 USB MIDI found");
+                return AdapterType::RpPico2;
             }
         }
     }
@@ -216,6 +238,18 @@ pub fn create_keyer(
             #[cfg(not(feature = "keyer-attiny85"))]
             {
                 log::warn!("adapter = \"attiny85\" in config but this build has no ATtiny85 support — falling back to keyboard text-input");
+                Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
+            }
+        }
+        AdapterType::RpPico2 => {
+            #[cfg(feature = "keyer-pico2")]
+            {
+                if switch_paddle { log::info!("Paddle switched: DIT←→DAH"); }
+                Ok((Box::new(pico2::Pico2Keyer::new(mode, dot_dur, port, switch_paddle)?), false, None))
+            }
+            #[cfg(not(feature = "keyer-pico2"))]
+            {
+                log::warn!("adapter = \"rp-pico2\" in config but this build has no Pico 2 support — falling back to keyboard text-input");
                 Ok((Box::new(keyboard::KeyboardKeyer::new()), true, None))
             }
         }

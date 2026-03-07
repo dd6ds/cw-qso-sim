@@ -61,7 +61,7 @@ pub struct Cli {
     #[arg(long)]
     pub my_dok: Option<String>,
 
-    /// Keyer adapter: auto | vband | attiny85 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer | keyboard
+    /// Keyer adapter: auto | vband | attiny85 | rp-pico2 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer | keyboard
     #[arg(long)]
     pub adapter: Option<AdapterType>,
 
@@ -138,6 +138,10 @@ pub enum AdapterType {
     /// ATtiny85 MIDI paddle
     #[cfg_attr(not(feature = "keyer-attiny85"), value(skip))]
     Attiny85,
+    /// Raspberry Pi Pico 2 (RP2350) USB MIDI paddle
+    #[cfg_attr(not(feature = "keyer-pico2"), value(skip))]
+    #[value(name = "rp-pico2")]
+    RpPico2,
     /// Arduino Nano serial-MIDI paddle (31250 baud; autodetects CH340/FT232/ATmega16U2)
     #[cfg_attr(not(feature = "keyer-nano"), value(skip))]
     ArduinoNano,

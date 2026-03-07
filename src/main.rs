@@ -179,6 +179,12 @@ fn main() -> Result<()> {
                 #[cfg(not(feature = "keyer-attiny85"))]
                 { println!("keyer-attiny85 feature not compiled in."); false }
             }
+            config::AdapterType::RpPico2 => {
+                #[cfg(feature = "keyer-pico2")]
+                { keyer::pico2::check_adapter(port, timeout)? }
+                #[cfg(not(feature = "keyer-pico2"))]
+                { println!("keyer-pico2 feature not compiled in."); false }
+            }
             config::AdapterType::ArduinoNano => {
                 #[cfg(feature = "keyer-nano")]
                 { keyer::nano::check_adapter(port, "Arduino Nano (serial MIDI)", keyer::nano::BAUD_MIDI, timeout)? }
@@ -211,7 +217,7 @@ fn main() -> Result<()> {
             }
             _ => {
                 println!("No hardware adapter selected or detected.");
-                println!("Supported: --adapter vband | attiny85 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer");
+                println!("Supported: --adapter vband | attiny85 | rp-pico2 | arduino-nano | arduino-uno | esp32 | esp8266 | winkeyer");
                 false
             }
         };

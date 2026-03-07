@@ -29,6 +29,7 @@ Supports iambic paddles (VBand USB HID, ATtiny85/Digispark MIDI), straight keys,
 |---|---|---|---|
 | VBand USB CW Adapter | USB HID | VID `413d` / PID `2107` | Linux, Windows |
 | ATtiny85 / Digispark | USB MIDI | VID `16d0` / PID `0753` | Linux, Windows |
+| Raspberry Pi Pico 2 (RP2350) | USB MIDI | VID `2e8a` (port name auto-detect) | Linux, Windows |
 | Arduino Nano | Serial MIDI (31250 baud) | VID `1a86` / PID `7523` (CH340)<br>VID `1a86` / PID `55d4` (CH9102)<br>VID `0403` / PID `6001` (FT232RL)<br>VID `2341` / PID `0043` (ATmega16U2, new bootloader)<br>VID `2341` / PID `0001` (ATmega16U2, old bootloader) | Linux, Windows |
 | Arduino Uno | Serial MIDI (31250 baud) | VID `2341` / PID `0043` (ATmega16U2, new bootloader)<br>VID `2341` / PID `0001` (ATmega16U2, old bootloader)<br>VID `2341` / PID `0049` (WiFi Rev2)<br>VID `2341` / PID `0069` (R4 Minima)<br>VID `2341` / PID `0070` (R4 WiFi)<br>VID `1a86` / PID `7523` (CH340 clone)<br>VID `0403` / PID `6001` (FT232RL clone) | Linux, Windows |
 | ESP8266 | Serial MIDI (115200 baud) | VID `1a86` / PID `7523` | Linux |
@@ -69,13 +70,13 @@ SPEED & AUDIO
     --tone <HZ>              Sidetone frequency in Hz (default: 620)
 
 KEYER
-    --adapter <TYPE>         auto | vband | attiny85 | arduino-nano | arduino-uno |
+    --adapter <TYPE>         auto | vband | attiny85 | rp-pico2 | arduino-nano | arduino-uno |
                              esp32 | esp8266 | winkeyer | keyboard
     --paddle-mode <MODE>     iambic_a | iambic_b | straight
     --switch-paddle          Swap DIT and DAH paddles
     --port <PORT>            Serial port for arduino-nano, arduino-uno, esp32, esp8266,
                              winkeyer (e.g. /dev/ttyUSB0, COM3)
-    --midi-port <PORT>       MIDI port name or substring for ATtiny85 (overrides --port)
+    --midi-port <PORT>       MIDI port name or substring for ATtiny85 / rp-pico2 (overrides --port)
 
 QSO
     --who-starts <WHO>       me | sim — who sends CQ first (default: sim)
@@ -126,7 +127,7 @@ volume         = 0.7         # 0.0 – 1.0
 sidetone       = true        # play sidetone while you key
 
 [keyer]
-adapter    = "auto"          # auto | vband | attiny85 | arduino-nano | arduino-uno | keyboard
+adapter    = "auto"          # auto | vband | attiny85 | rp-pico2 | arduino-nano | arduino-uno | keyboard
 mode       = "iambic_a"      # iambic_a | iambic_b | straight
 # port     = "/dev/ttyUSB0" # serial port for arduino-nano / arduino-uno (auto-detected if omitted)
 # switch_paddle = false      # true = swap DIT and DAH paddles
@@ -263,6 +264,44 @@ ATtiny85 GND         →  Paddle common ground
 
 
 
+
+### Raspberry Pi Pico 2 / RP2350 (Linux)
+
+Flash `paddle_debug_pico2/paddle_debug_pico2.ino` (see `paddle_debug_pico2/INFO.md` for full setup).
+
+#### Wiring
+
+```
+Pico 2 GP2  (pin 4)  →  LEFT  paddle (DIT)
+Pico 2 GP0  (pin 1)  →  RIGHT paddle (DAH)
+Pico 2 GND  (pin 38) →  Paddle common ground
+```
+
+#### Usage
+
+```sh
+cw-qso-sim --adapter rp-pico2
+cw-qso-sim --adapter rp-pico2 --check-adapter
+# if auto-detect misses the port name:
+cw-qso-sim --adapter rp-pico2 --midi-port "TinyUSB MIDI"
+```
+
+#### udev rules (Linux)
+
+Add to `/etc/udev/rules.d/99-pico.rules`:
+
+```
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000f", TAG+="uaccess", MODE="660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000a", TAG+="uaccess", MODE="660", GROUP="plugdev"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", MODE="660", GROUP="plugdev", TAG+="uaccess"
+```
+
+```sh
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG plugdev $USER   # re-login required
+```
+
+---
 
 ### ESP8266 (all platforms)
 
@@ -475,6 +514,9 @@ cargo build --release
 | `keyer-vband` | ✓ | VBand USB HID paddle support |
 | `keyer-vband-winusb` | — | WinUSB fallback for VBand on Windows (libwdi/Zadig driver) |
 | `keyer-attiny85` | ✓ | ATtiny85/Digispark MIDI paddle support |
+| `keyer-pico2` | ✓ | Raspberry Pi Pico 2 (RP2350) USB MIDI paddle support |
+| `keyer-nano` | ✓ | Arduino Nano/Uno/ESP32/ESP8266 serial MIDI support |
+| `keyer-winkeyer` | ✓ | K1EL WinKeyer USB/Serial support |
 | `tui` | ✓ | Ratatui terminal UI |
 
 
@@ -500,8 +542,8 @@ Run `cw-qso-sim --list-ports` to see what's detected, then `cw-qso-sim --check-a
 **Paddles are swapped**  
 Add `--switch-paddle` on the CLI or set `switch_paddle = true` in `[keyer]`.
 
-**MIDI port not found (ATtiny85)**  
-Run `--list-ports` to see the exact port name, then set it with `--midi-port "Digispark"` or in config.
+**MIDI port not found (ATtiny85 / Pico 2)**
+Run `--list-ports` to see the exact port name, then set it with `--midi-port "Digispark"` (ATtiny85) or `--midi-port "TinyUSB MIDI"` (Pico 2), or set it in config.
 
 **Arduino Nano / Uno not found automatically**
 Run `cw-qso-sim --list-ports` to see all detected serial ports, then supply the port explicitly: `--port /dev/ttyUSB0` (Linux) or `--port COM3` (Windows). On Linux, make sure you are in the `dialout` group (`sudo usermod -aG dialout $USER`, then re-login) or that the udev rule above is in place.
@@ -535,6 +577,12 @@ ATTiny85
 ./cw-qso-sim-x86_64-unknown-linux-gnu --adapter attiny85 --check-adapter
 
 cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter attiny85 --check-adapter
+
+Raspberry Pi Pico 2
+
+./cw-qso-sim-x86_64-unknown-linux-gnu --adapter rp-pico2 --check-adapter
+
+cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter rp-pico2 --check-adapter
 
 VBAND USB 
 
