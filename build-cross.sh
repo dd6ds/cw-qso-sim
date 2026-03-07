@@ -19,12 +19,25 @@
 #   toolchain is used directly via plain `cargo`.
 #
 # Features per target:
-#   Linux x86_64    : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
-#   Linux aarch64   : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
-#   Linux armv7     : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
-#   macOS x86_64    : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
-#   macOS aarch64   : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
-#   Windows GNU     : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   Linux x86_64      : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   Linux aarch64     : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   Linux armv7       : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   macOS x86_64      : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   macOS aarch64     : full  (audio-cpal + keyer-vband + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   Windows x86_64    : full  (audio-cpal + keyer-vband + keyer-vband-winusb + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   Windows ARM64     : full  (audio-cpal + keyer-vband + keyer-vband-winusb + keyer-attiny85 + keyer-pico2 + keyer-nano + keyer-winkeyer + tui)
+#   FreeBSD x86_64    : serial+tui  (keyer-nano + keyer-winkeyer + tui)
+#                       audio-cpal excluded: cpal needs alsa-lib (FreeBSD port, not in cross sysroot)
+#                       keyer-vband excluded: hidapi uses pkg_config on FreeBSD (not in sysroot)
+#                       keyer-attiny85/pico2 excluded: midir has no FreeBSD backend without JACK
+#
+# Not supported:
+#   FreeBSD aarch64   : Tier 3 — no prebuilt std on any channel; needs -Z build-std on nightly
+#   OpenBSD           : Tier 3 — no prebuilt std, no cross-rs image, cpal has no OpenBSD backend
+#
+# Windows ARM64 target: aarch64-pc-windows-gnullvm  (LLVM MinGW / Zig toolchain)
+#   Built via cargo-zigbuild (same tool used for macOS cross-builds) — no Docker image required.
+#   rustup target add aarch64-pc-windows-gnullvm
 #
 # keyer-nano     — Arduino Nano / Uno / ESP32 / ESP8266 serial-MIDI paddles (serialport crate)
 # keyer-winkeyer — K1EL WinKeyer USB/Serial WK2/WK3 (1200 baud, serialport crate)
@@ -255,6 +268,91 @@ WRAPPER
     echo "  ✓  $dst  ($(du -sh "$dst" | cut -f1))"
 }
 
+# ── Helper — Windows ARM64 (via cargo-zigbuild, no Docker) ───────────────────
+# Zig ships its own cross-capable C/C++ toolchain for aarch64-windows, so no
+# external SDK or Docker image is needed.  cargo-zigbuild is already required
+# for the macOS cross builds, so no new dependency is added.
+#
+# Missing import libraries:
+#   Zig's bundled MinGW only ships lib32, lib64, libarm32 — no arm64 import libs.
+#   winapi-0.3.9 (pulled in by crossterm) links against `synchronization` (for
+#   WaitOnAddress etc.), which Zig cannot resolve for aarch64-pe.
+#   We generate the missing .a stubs with llvm-dlltool before calling cargo.
+build_zigbuild() {
+    local target="$1"
+    local ext="${2:-.exe}"
+    local features="${3:-audio-cpal,keyer-vband,keyer-vband-winusb,keyer-attiny85,keyer-pico2,keyer-nano,keyer-winkeyer,tui}"
+    local tgt_dir="target-${target}"
+
+    echo ""
+    echo "══════════════════════════════════════════════"
+    echo "  Building  →  $target  (cargo-zigbuild)"
+    echo "  Features  →  $features"
+    echo "  TargetDir →  $tgt_dir"
+    echo "══════════════════════════════════════════════"
+
+    if ! command -v cargo-zigbuild &>/dev/null; then
+        echo "  ⚠  Skipping $target (cargo-zigbuild not found)" >&2
+        echo "     → cargo install cargo-zigbuild" >&2
+        return 0
+    fi
+
+    if ! rustup target list --installed 2>/dev/null | grep -q "^${target}$"; then
+        echo "  ⚠  Skipping $target (rustup target not installed)" >&2
+        echo "     → rustup target add ${target}" >&2
+        return 0
+    fi
+
+    # ── Generate missing Windows ARM64 import libraries ───────────────────────
+    # Zig's MinGW does not ship aarch64 import libs; winapi-0.3.9 (via crossterm)
+    # links against `synchronization` (WaitOnAddress, WakeByAddress*).
+    # We use llvm-dlltool (ships with LLVM/Clang) to generate a stub .a.
+    local arm64_libs_dir="${SCRIPT_DIR}/win-arm64-libs"
+    mkdir -p "$arm64_libs_dir"
+
+    if ! [ -f "${arm64_libs_dir}/libsynchronization.a" ]; then
+        if command -v llvm-dlltool &>/dev/null; then
+            echo "  Generating libsynchronization.a (llvm-dlltool) …"
+            cat > "${arm64_libs_dir}/synchronization.def" << 'DEFEOF'
+LIBRARY SYNCHRONIZATION.DLL
+EXPORTS
+WaitOnAddress
+WakeByAddressAll
+WakeByAddressSingle
+WakeByAddressAllNoFence
+WakeByAddressSingleNoFence
+DEFEOF
+            llvm-dlltool -m arm64 -D SYNCHRONIZATION.DLL \
+                --output-lib "${arm64_libs_dir}/libsynchronization.a" \
+                --input-def  "${arm64_libs_dir}/synchronization.def"
+            echo "  ✓  ${arm64_libs_dir}/libsynchronization.a"
+        else
+            echo "  ⚠  llvm-dlltool not found — cannot generate libsynchronization.a" >&2
+            echo "     Install: apt install llvm  (or brew install llvm on macOS)" >&2
+            echo "     Build may fail at link time if winapi synchapi is used." >&2
+        fi
+    else
+        echo "  ✓  libsynchronization.a already present — skipping generation"
+    fi
+
+    # Pass the extra lib search path so zig's linker finds libsynchronization.a.
+    # CARGO_TARGET_<TARGET>_RUSTFLAGS is the target-scoped equivalent of RUSTFLAGS.
+    local rustflags_var
+    rustflags_var="CARGO_TARGET_$(echo "$target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
+
+    env "${rustflags_var}=-L ${arm64_libs_dir}" \
+    cargo zigbuild --release \
+        --target      "$target" \
+        --target-dir  "$tgt_dir" \
+        --no-default-features \
+        --features    "$features"
+
+    local src="${tgt_dir}/${target}/release/${BINARY}${ext}"
+    local dst="${OUT_DIR}/${BINARY}-${target}${ext}"
+    cp "$src" "$dst"
+    echo "  ✓  $dst  ($(du -sh "$dst" | cut -f1))"
+}
+
 # ── macOS cross-compile prerequisites — install tools + download SDK ──────────
 # Called once before any builds.  On a native macOS host this is a no-op.
 #
@@ -292,6 +390,25 @@ prepare_macos_sdk() {
             rustup target add "${darwin_target}"
         fi
     done
+
+    # ── rustup Windows ARM target (also uses cargo-zigbuild) ─────────────────
+    local win_arm_target="aarch64-pc-windows-gnullvm"
+    if rustup target list --installed 2>/dev/null | grep -q "^${win_arm_target}$"; then
+        echo "  ✓  rustup target: ${win_arm_target}"
+    else
+        echo "  Adding rustup target: ${win_arm_target} …"
+        rustup target add "${win_arm_target}"
+    fi
+
+    # ── rustup FreeBSD x86_64 target ─────────────────────────────────────────
+    # Tier 2 — prebuilt std available on stable; built via cross.
+    local freebsd_target="x86_64-unknown-freebsd"
+    if rustup target list --installed 2>/dev/null | grep -q "^${freebsd_target}$"; then
+        echo "  ✓  rustup target: ${freebsd_target}"
+    else
+        echo "  Adding rustup target: ${freebsd_target} …"
+        rustup target add "${freebsd_target}"
+    fi
 
     # ── macOS SDK ─────────────────────────────────────────────────────────────
     # Create the cache directory first — find on a missing path returns exit-code
@@ -381,6 +498,38 @@ build_mac "aarch64-apple-darwin" \
 # Requires cmake in the cross container for the vendored libusb build.
 build "x86_64-pc-windows-gnu" ".exe" \
     "audio-cpal,keyer-vband,keyer-vband-winusb,keyer-attiny85,keyer-pico2,keyer-nano,keyer-winkeyer,tui"
+
+# Windows ARM64 — built via cargo-zigbuild (no Docker image needed).
+# Produces a native aarch64 Windows binary — runs on Surface Pro X / ARM laptops
+# and on Windows 11 for ARM without emulation.
+# Same feature set as x86_64 Windows, including the WinUSB/rusb HID fallback.
+# The rustup target and cargo-zigbuild are installed automatically by the
+# prepare_macos_sdk step above; build_zigbuild() also handles missing deps gracefully.
+build_zigbuild "aarch64-pc-windows-gnullvm" ".exe" \
+    "audio-cpal,keyer-vband,keyer-vband-winusb,keyer-attiny85,keyer-pico2,keyer-nano,keyer-winkeyer,tui"
+
+# FreeBSD x86_64 — Tier 2 stable target, built via cross.
+#
+# Reduced feature set — the cross-rs sysroot is the FreeBSD base distribution
+# which does NOT include ports/packages:
+#   • audio-cpal   excluded  cpal's FreeBSD backend needs alsa-lib (port audio/alsa-lib)
+#   • keyer-vband  excluded  hidapi on FreeBSD calls pkg_config("hidapi"); not in sysroot
+#   • keyer-attiny85/pico2 excluded  midir has no FreeBSD backend without JACK
+#
+# To build with full features, either:
+#   a) Build natively inside a FreeBSD VM / jail, or
+#   b) Create a custom cross image with alsa-lib + hidapi + JACK pre-installed:
+#      FROM ghcr.io/cross-rs/x86_64-unknown-freebsd:main
+#      RUN pkg install -y alsa-lib hidapi jackit   # run via qemu-user FreeBSD chroot
+build "x86_64-unknown-freebsd" "" \
+    "keyer-nano,keyer-winkeyer,tui"
+
+# FreeBSD aarch64 — Tier 3, no prebuilt std on any channel (not even nightly).
+# Would require -Z build-std on a nightly toolchain.  Not included.
+
+# OpenBSD — Tier 3, no prebuilt std, no cross-rs image, and cpal has no
+# OpenBSD backend (OpenBSD uses sndio; cpal only supports ALSA / WASAPI /
+# CoreAudio / JACK).  Cross-compilation for OpenBSD is not feasible here.
 
 echo ""
 echo "══════════════════════════════════════════════"

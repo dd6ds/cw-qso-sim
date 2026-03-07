@@ -322,7 +322,7 @@ ATtiny85 GND         →  Paddle common ground
 
 
 
-Flash `paddle_debug_pico2/paddle_debug_pico2.ino`
+Flash `paddle_debug_pico2/paddle_debug_pico2.ino` (see `paddle_debug_pico2/INFO.md` for full setup).
 
 #### Wiring
 
