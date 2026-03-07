@@ -113,6 +113,11 @@ pub struct Cli {
     #[arg(long, action)]
     pub no_decode: bool,
 
+    /// Keyer-only mode: display your decoded keying, no QSO simulation.
+    /// All keyer, sidetone, and decoder options still apply.
+    #[arg(long, action)]
+    pub keyer_only: bool,
+
     /// Print help (translated when --lang is set)
     #[arg(short = 'h', long = "help", action = clap::ArgAction::SetTrue)]
     pub help: bool,
@@ -255,6 +260,8 @@ pub struct AppConfig {
     pub my_dok:         String,
     /// Suppress on-screen CW decoding display (QSO still advances normally)
     pub no_decode:      bool,
+    /// Keyer-only mode: no QSO engine, just show decoded keying
+    pub keyer_only:     bool,
 }
 
 impl Default for AppConfig {
@@ -283,6 +290,7 @@ impl Default for AppConfig {
             my_dok:         "NM".into(),
             demo:           false,
             no_decode:      false,
+            keyer_only:     false,
         }
     }
 }
@@ -376,6 +384,7 @@ impl AppConfig {
         if let Some(v) = &cli.my_dok     { self.my_dok      = v.clone(); }
         if cli.demo                      { self.demo        = true; }
         if cli.no_decode                 { self.no_decode   = true; }
+        if cli.keyer_only                { self.keyer_only  = true; }
     }
 }
 
@@ -430,6 +439,7 @@ pub fn print_help(lang: &crate::i18n::I18n) {
         ("      --print-config",        "cli.help.print_config"),
         ("      --demo",                "cli.help.demo"),
         ("      --no-decode",           "cli.help.no_decode"),
+        ("      --keyer-only",          "cli.help.keyer_only"),
         ("  -h, --help",                "cli.help.help"),
         ("  -V, --version",             "cli.help.version"),
     ];

@@ -97,7 +97,8 @@ impl QsoScript {
     /// `cwt_name` / `cwt_nr` are the user's own CWT exchange fields (name + member nr or state/country).
     /// `who_starts` / `my_ref` control activator-role handling for POTA/SOTA/TOTA/COTA:
     /// when `who_starts == Me` the user IS the activator and sends the reference.
-    pub fn build(mycall: &str, ex: &SimExchange, style: QsoStyle, my_rst: &str, my_serial: u32,
+    pub fn build<R: Rng>(rng: &mut R,
+                 mycall: &str, ex: &SimExchange, style: QsoStyle, my_rst: &str, my_serial: u32,
                  cwt_name: &str, cwt_nr: &str, my_dok: &str,
                  who_starts: WhoStarts, my_ref: &str) -> Self {
         let sc  = &ex.sim_call;
@@ -161,22 +162,39 @@ impl QsoScript {
 
         // ── DARC CW Contest: only RST + DOK exchanged ─────────────────────────
         if style == QsoStyle::DarcCwContest {
-            let cq = format!("CQ TEST DE {sc} {sc} K");
-            let answer = format!("{mycall} DE {sc} {sc} K");
-            // sim sends its RST + DOK (NM if not a DARC member / not DL)
-            let report = format!(
-                "{mycall} DE {sc} RST {sr} {sr} DOK {dok} {dok} <AR>"
-            );
-            // sim acks with TU + our RST (sim doesn't know our DOK, just confirms)
-            let ack_report = format!("{mycall} RST {my_rst} {my_rst} <AR>");
-            let sign_off   = format!("TU 73 DE {sc} <SK>");
+            // Random CQ start sequences — all three are heard in real DARC contests:
+            //   0 → CQ TEST DE <sc> <sc> K   (traditional full form)
+            //   1 → TEST <sc> <sc>            (abbreviated, no CQ prefix, no K)
+            //   2 → TEST DE <sc> <sc> K       (no CQ prefix, with DE and K)
+            let cq = match rng.gen_range(0u32..3) {
+                0 => format!("CQ TEST DE {sc} {sc} K"),
+                1 => format!("TEST {sc} {sc}"),
+                _ => format!("TEST DE {sc} {sc} K"),
+            };
+
+            // Compact contest report — common in DARC HF contests
+            let report = format!("{mycall} TU {sr} DOK {dok} {dok} K");
+
+            // Sim acks the user's report with either "R" or "TU" — both are
+            // frequently heard in real contests; pick randomly each QSO.
+            let ack_report = if rng.gen_bool(0.5) {
+                "R".to_string()
+            } else {
+                "TU".to_string()
+            };
+
+            let sign_off = format!("TU 73 DE {sc} <SK>");
 
             return Self {
-                cq, answer, report, ack_report,
+                cq,
+                // SIM answers user's directed call — most common format in real ops
+                answer: format!("{mycall} DE {sc} {sc} K"),
+                report,
+                ack_report,
                 chat:       vec![],
                 sign_off,
-                // contest_ex is the hint showing what the USER should send back
-                contest_ex: format!("{sc} UR RST 599 DOK {my_dok} {my_dok} <AR>"),
+                // Hint shown to the user: what they should send back
+                contest_ex: format!("{sc} TU RST 599 DOK {my_dok} {my_dok} K"),
             };
         }
 

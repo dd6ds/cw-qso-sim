@@ -12,6 +12,7 @@ Supports iambic paddles (VBand USB HID, ATtiny85/Digispark MIDI), straight keys,
 ## Features
 
 - **QSO engine** — ragchew, contest, DX pile-up, DARC CW, MWC, CWT, WWA, WPX, QTT, SST, CQ DX, POTA, SOTA, TOTA, COTA, and random styles
+- **Keyer-only mode** — `--keyer-only` disables the QSO engine completely; just key CW and watch the live decode — ideal for warm-up, fist practice, or checking your timing
 - **Live speed control** — send `QRS` or `QRQ` at any time to adjust the simulator speed on the fly
 - **Repeat request** — send `?` to make the simulator repeat its last transmission
 - **Iambic keyer** — mode A and B, straight key, or keyboard text-input fallback
@@ -67,6 +68,7 @@ IDENTITY
 SPEED & AUDIO
     --sim-wpm <N>            Simulator TX speed in WPM (default: 25)
     --user-wpm <N>           Your keying / decoder speed in WPM (default: 18)
+    --farnsworth <N>         Farnsworth effective WPM — stretches inter-char gaps; 0 = off (default: 0)
     --tone <HZ>              Sidetone frequency in Hz (default: 620)
 
 KEYER
@@ -88,6 +90,12 @@ QSO
     --cwt-nr <NR>            Your CWT member nr or state/SPC (e.g. 1234, DL, MA)
     --my-dok <DOK>           Your DARC DOK for darc-cw-contest (e.g. P53; NM if non-member)
     --demo                   Auto-play a complete QSO without a keyer; press ESC to exit
+
+TRAINING
+    --no-decode              Hide decoded CW text on screen — QSO still advances normally;
+                             useful for self-testing without a visual cheat-sheet
+    --keyer-only             Display decoded keying with sidetone — no QSO simulation at all;
+                             useful for warm-up, fist practice, or checking your timing
 
 INTERFACE
     --lang <LANG>            en | de | fr | it  (default: en)
@@ -200,6 +208,35 @@ Maximum speed: **50 WPM**.
 - `QRS` / `QRQ` do **not** interrupt or restart the QSO; the phase continues from where it was.
 - When `QRS` or `QRQ` appears in the same over as your callsign (e.g. `SM5XY DE DD6DS QRS K`), the simulator sends its normal exchange at the new speed — no separate `QRS QRS` acknowledgment is sent.
 - `QRP` is **not** a speed command — in CW it means *reduce power*. Use `QRS` to slow down and `QRQ` to speed up.
+
+---
+
+## Keyer-only mode
+
+`--keyer-only` runs only the keyer, sidetone, and CW decoder — the QSO simulation engine is not started at all.
+Use it for warm-up exercises, fist practice, or verifying that your paddle and sidetone are working correctly before a QSO session.
+
+All keyer, audio, and decoder options still apply: `--adapter`, `--paddle-mode`, `--switch-paddle`, `--tone`, `--user-wpm`, `--farnsworth`, etc.
+
+```sh
+# Hardware paddle — decoded text shown live, sidetone plays
+cw-qso-sim --keyer-only
+
+# Keyboard fallback — type characters, see them decoded
+cw-qso-sim --keyer-only --adapter keyboard
+
+# Set decoder speed and tone to match your own keying
+cw-qso-sim --keyer-only --user-wpm 20 --tone 700
+
+# Change UI language
+cw-qso-sim --keyer-only --lang de
+```
+
+Press **ESC** (or **Q** in hardware-keyer mode) to quit.
+
+> `--no-decode` and `--keyer-only` are independent.
+> `--no-decode` hides the decoded text **inside a QSO** but the engine still runs.
+> `--keyer-only` removes the QSO engine entirely — there is no simulated station and no exchange.
 
 ---
 
@@ -643,7 +680,7 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 | Rag-chew | `ragchew` | RST + Name + QTH + Rig + Ant + Pwr | Full rag-chew with chat turns |
 | Generic Contest | `contest` | RST + serial | Generic contest format |
 | DX Pile-up | `dx-pileup` | RST + serial | Simulates a DX pile-up |
-| DARC CW Contest | `darc-cw-contest` | RST + DOK | German DARC members only; requires `--my-dok` |
+| DARC CW Contest | `darc-cw-contest` | RST + DOK | German DARC members only; requires `--my-dok`; CQ format randomised (3 variants), ack randomised (`R` or `TU`) |
 | MWC Contest | `mwc-contest` | RST + serial | Midwest Wireless Club format |
 | CWT Contest | `cwt-contest` | Name + member nr (or state/country) | Requires `--cwt-name` and `--cwt-nr` |
 | WWA Contest | `wwa-contest` | RST + serial (sent twice) + BK | Uses real WWA special callsigns (118 stations) |
@@ -664,6 +701,9 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 ./cw-qso-sim --demo --style ragchew --mycall DD6DS
 
 # DARC CW Contest  (requires your DOK)
+# CQ format varies each QSO: "CQ TEST DE …", "TEST DE …", or "TEST …"
+# SIM report uses compact format: "<call> TU <rst> DOK <dok> <dok> K"
+# SIM ack after your exchange is randomly "R" or "TU"
 ./cw-qso-sim --demo --style darc-cw-contest --mycall DD6DS --my-dok P53
 
 # MWC Contest

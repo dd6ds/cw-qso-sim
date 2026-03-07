@@ -19,73 +19,78 @@ use std::time::Duration;
 
 // ── Translated status messages ────────────────────────────────────────────────
 struct StatusMsg {
-    starting:          &'static str,
-    demo_starting:     &'static str,
-    transmitting:      &'static str,
-    demo_transmitting: &'static str,
-    demo_waiting:      &'static str,
-    demo_preparing:    &'static str,
-    demo_sending:      &'static str,
-    listening:         &'static str,
-    demo_complete:     &'static str,
-    qso_complete:      &'static str,
-    repeating:         &'static str,
+    starting:            &'static str,
+    demo_starting:       &'static str,
+    transmitting:        &'static str,
+    demo_transmitting:   &'static str,
+    demo_waiting:        &'static str,
+    demo_preparing:      &'static str,
+    demo_sending:        &'static str,
+    listening:           &'static str,
+    demo_complete:       &'static str,
+    qso_complete:        &'static str,
+    repeating:           &'static str,
+    keyer_only_listening: &'static str,
 }
 
 impl StatusMsg {
     fn new(lang: &str) -> Self {
         match lang {
             "de" => Self {
-                starting:          "Starte…",
-                demo_starting:     "DEMO — SIM spielt das gesamte QSO…",
-                transmitting:      "SIM sendet…",
-                demo_transmitting: "DEMO: SIM sendet…",
-                demo_waiting:      "DEMO: Warte auf SIM…",
-                demo_preparing:    "DEMO: Antwort wird vorbereitet…",
-                demo_sending:      "DEMO: Antwort wird gesendet…",
-                listening:         "Warte auf dein Signal…",
-                demo_complete:     "DEMO ABGESCHLOSSEN — ESC zum Beenden",
-                qso_complete:      "QSO beendet — 73!",
-                repeating:         "Letzte Sendung wird wiederholt…",
+                starting:              "Starte…",
+                demo_starting:         "DEMO — SIM spielt das gesamte QSO…",
+                transmitting:          "SIM sendet…",
+                demo_transmitting:     "DEMO: SIM sendet…",
+                demo_waiting:          "DEMO: Warte auf SIM…",
+                demo_preparing:        "DEMO: Antwort wird vorbereitet…",
+                demo_sending:          "DEMO: Antwort wird gesendet…",
+                listening:             "Warte auf dein Signal…",
+                demo_complete:         "DEMO ABGESCHLOSSEN — ESC zum Beenden",
+                qso_complete:          "QSO beendet — 73!",
+                repeating:             "Letzte Sendung wird wiederholt…",
+                keyer_only_listening:  "NUR TASTER — Dekodierung läuft… (ESC zum Beenden)",
             },
             "fr" => Self {
-                starting:          "Démarrage…",
-                demo_starting:     "DÉMO — SIM joue le QSO complet…",
-                transmitting:      "SIM émet…",
-                demo_transmitting: "DÉMO: SIM émet…",
-                demo_waiting:      "DÉMO: attente de fin SIM…",
-                demo_preparing:    "DÉMO: préparation de la réponse…",
-                demo_sending:      "DÉMO: envoi de la réponse…",
-                listening:         "En attente de votre signal…",
-                demo_complete:     "DÉMO TERMINÉE — ESC pour quitter",
-                qso_complete:      "QSO terminé — 73!",
-                repeating:         "Répétition de la dernière émission…",
+                starting:              "Démarrage…",
+                demo_starting:         "DÉMO — SIM joue le QSO complet…",
+                transmitting:          "SIM émet…",
+                demo_transmitting:     "DÉMO: SIM émet…",
+                demo_waiting:          "DÉMO: attente de fin SIM…",
+                demo_preparing:        "DÉMO: préparation de la réponse…",
+                demo_sending:          "DÉMO: envoi de la réponse…",
+                listening:             "En attente de votre signal…",
+                demo_complete:         "DÉMO TERMINÉE — ESC pour quitter",
+                qso_complete:          "QSO terminé — 73!",
+                repeating:             "Répétition de la dernière émission…",
+                keyer_only_listening:  "MANIPULATEUR SEUL — Décodage en cours… (ESC pour quitter)",
             },
             "it" => Self {
-                starting:          "Avvio…",
-                demo_starting:     "DEMO — SIM riproduce il QSO completo…",
-                transmitting:      "SIM trasmette…",
-                demo_transmitting: "DEMO: SIM trasmette…",
-                demo_waiting:      "DEMO: attesa fine SIM…",
-                demo_preparing:    "DEMO: preparazione risposta…",
-                demo_sending:      "DEMO: invio risposta…",
-                listening:         "In attesa del tuo segnale…",
-                demo_complete:     "DEMO COMPLETATA — ESC per uscire",
-                qso_complete:      "QSO terminato — 73!",
-                repeating:         "Ripetizione ultima trasmissione…",
+                starting:              "Avvio…",
+                demo_starting:         "DEMO — SIM riproduce il QSO completo…",
+                transmitting:          "SIM trasmette…",
+                demo_transmitting:     "DEMO: SIM trasmette…",
+                demo_waiting:          "DEMO: attesa fine SIM…",
+                demo_preparing:        "DEMO: preparazione risposta…",
+                demo_sending:          "DEMO: invio risposta…",
+                listening:             "In attesa del tuo segnale…",
+                demo_complete:         "DEMO COMPLETATA — ESC per uscire",
+                qso_complete:          "QSO terminato — 73!",
+                repeating:             "Ripetizione ultima trasmissione…",
+                keyer_only_listening:  "SOLO TASTO — Decodifica in corso… (ESC per uscire)",
             },
             _ => Self {  // English (default)
-                starting:          "Starting…",
-                demo_starting:     "DEMO — SIM will play the full QSO…",
-                transmitting:      "SIM transmitting…",
-                demo_transmitting: "DEMO: SIM transmitting…",
-                demo_waiting:      "DEMO: waiting for SIM to finish…",
-                demo_preparing:    "DEMO: preparing response…",
-                demo_sending:      "DEMO: sending response…",
-                listening:         "Listening for your key…",
-                demo_complete:     "DEMO COMPLETE — Press ESC to exit",
-                qso_complete:      "QSO complete — 73!",
-                repeating:         "Repeating last TX…",
+                starting:              "Starting…",
+                demo_starting:         "DEMO — SIM will play the full QSO…",
+                transmitting:          "SIM transmitting…",
+                demo_transmitting:     "DEMO: SIM transmitting…",
+                demo_waiting:          "DEMO: waiting for SIM to finish…",
+                demo_preparing:        "DEMO: preparing response…",
+                demo_sending:          "DEMO: sending response…",
+                listening:             "Listening for your key…",
+                demo_complete:         "DEMO COMPLETE — Press ESC to exit",
+                qso_complete:          "QSO complete — 73!",
+                repeating:             "Repeating last TX…",
+                keyer_only_listening:  "KEYER ONLY — Decoding your keying… (ESC to quit)",
             },
         }
     }
@@ -248,10 +253,16 @@ fn main() -> Result<()> {
     let (keyer, is_keyboard, _windows_paddle) = keyer::create_keyer(cfg.adapter, keyer_port, cfg.paddle_mode, user_timing.dot, cfg.switch_paddle)?;
 
     // ── QSO engine ────────────────────────────────────────────────────────────
+    // In --keyer-only mode no QSO engine is created — the sim station and all
+    // exchange logic are simply absent.
     // my_qso_serial starts at 1 and would increment across multiple QSOs in
     // a future multi-QSO session.  For now one process = one QSO.
     let my_qso_serial: u32 = 1;
-    let mut engine = QsoEngine::new(&cfg, my_qso_serial);
+    let mut engine: Option<QsoEngine> = if cfg.keyer_only {
+        None
+    } else {
+        Some(QsoEngine::new(&cfg, my_qso_serial))
+    };
 
     // ── Decoder (your keying) ─────────────────────────────────────────────────
     let mut decoder = Decoder::new(user_timing);
@@ -259,12 +270,13 @@ fn main() -> Result<()> {
     // ── Shared app state ──────────────────────────────────────────────────────
     let state = Arc::new(Mutex::new(AppState {
         mycall:    cfg.mycall.clone(),
-        sim_call:  engine.sim_callsign().to_string(),
+        sim_call:  engine.as_ref().map_or(String::new(), |e| e.sim_callsign().to_string()),
         sim_wpm:   cfg.sim_wpm,
         user_wpm:  cfg.user_wpm,
         tone_hz:   cfg.tone_hz,
-        status:    if cfg.demo { sm.demo_starting.into() }
-                   else        { sm.starting.into() },
+        status:    if cfg.keyer_only { sm.keyer_only_listening.into() }
+                   else if cfg.demo  { sm.demo_starting.into() }
+                   else              { sm.starting.into() },
         text_mode: is_keyboard,
         demo:      cfg.demo,
         no_decode: cfg.no_decode,
@@ -497,206 +509,209 @@ fn main() -> Result<()> {
             };
         }
 
-        // ── Demo: audio-done → stage 2 ────────────────────────────────────────
-        // Drain all done signals from the audio thread.  When we have a queued
-        // response waiting (stage 1), promote it to stage 2 (timed delay).
-        if cfg.demo && !demo_complete {
-            while rx_audio_done.try_recv().is_ok() {
-                if let Some(resp) = demo_queued_response.take() {
-                    let fire_at = std::time::Instant::now()
-                        + Duration::from_millis(600);
-                    demo_pending = Some((fire_at, resp));
-                    let mut st = state.lock().unwrap();
-                    st.status = sm.demo_preparing.into();
-                }
-            }
-        }
-
-        // ── Demo auto-injector ─────────────────────────────────────────────────
-        // When a demo response has been scheduled and its timer fires, inject it
-        // directly into the user input accumulator so the engine can advance.
-        if cfg.demo && !demo_complete {
-            if let Some((ref fire_at, ref resp)) = demo_pending {
-                if std::time::Instant::now() >= *fire_at {
-                    let resp = resp.clone();
-                    // Show in the YOUR INPUT panel
-                    {
+        // ── QSO logic — skipped entirely in --keyer-only mode ─────────────────
+        if let Some(ref mut engine) = engine {
+            // ── Demo: audio-done → stage 2 ────────────────────────────────────────
+            // Drain all done signals from the audio thread.  When we have a queued
+            // response waiting (stage 1), promote it to stage 2 (timed delay).
+            if cfg.demo && !demo_complete {
+                while rx_audio_done.try_recv().is_ok() {
+                    if let Some(resp) = demo_queued_response.take() {
+                        let fire_at = std::time::Instant::now()
+                            + Duration::from_millis(600);
+                        demo_pending = Some((fire_at, resp));
                         let mut st = state.lock().unwrap();
-                        st.user_decoded.push_str(&resp);
-                        st.user_decoded.push(' ');
-                        if st.user_decoded.len() > 200 {
-                            let trim = st.user_decoded.len() - 200;
-                            st.user_decoded = st.user_decoded[trim..].to_string();
-                        }
-                        st.status = sm.demo_sending.into();
+                        st.status = sm.demo_preparing.into();
                     }
-                    user_tx_acc     = resp;
-                    word_boundary   = true;
-                    text_end_of_over = true;
-                    demo_pending    = None;
                 }
             }
-        }
 
-        // QSO engine tick — accumulate the full over across word boundaries.
-        // Only submit to the engine (and clear) when an end-of-over prosign
-        // is received — or Enter in text-adapter mode.
-        //
-        // End-of-over markers, covering both text-mode and CW-decoder output:
-        //   "K"   — letter K (.-),              decoded as 'K'
-        //   "BK"  — prosign <BK> (-...-.-),     decoded as ' ' (word-gap)
-        //   "AR"  — prosign <AR> (.-.-.),        decoded as '+' by CW decoder
-        //   "KN"  — prosign <KN> (-.--.) ,       decoded as '(' by CW decoder
-        //
-        // The CW decoder emits '+' for <AR> and '(' for <KN>, so we must
-        // accept those single-char forms in addition to the text-mode strings.
-        let end_of_over = text_end_of_over || if word_boundary {
-            let last_word = user_tx_acc.trim().to_uppercase();
-            match last_word.split_whitespace().last() {
-                Some("K" | "BK" | "AR" | "KN") => true,
-                // CW-decoder prosign equivalents: <AR> → '+', <KN> → '('
-                Some("+" | "(") => true,
-                _ => false,
+            // ── Demo auto-injector ─────────────────────────────────────────────────
+            // When a demo response has been scheduled and its timer fires, inject it
+            // directly into the user input accumulator so the engine can advance.
+            if cfg.demo && !demo_complete {
+                if let Some((ref fire_at, ref resp)) = demo_pending {
+                    if std::time::Instant::now() >= *fire_at {
+                        let resp = resp.clone();
+                        // Show in the YOUR INPUT panel
+                        {
+                            let mut st = state.lock().unwrap();
+                            st.user_decoded.push_str(&resp);
+                            st.user_decoded.push(' ');
+                            if st.user_decoded.len() > 200 {
+                                let trim = st.user_decoded.len() - 200;
+                                st.user_decoded = st.user_decoded[trim..].to_string();
+                            }
+                            st.status = sm.demo_sending.into();
+                        }
+                        user_tx_acc      = resp;
+                        word_boundary    = true;
+                        text_end_of_over = true;
+                        demo_pending     = None;
+                    }
+                }
             }
-        } else {
-            false
-        };
 
-        // ── QRS / QRQ speed adjustment ─────────────────────────────────────────
-        // Only fires at end-of-over — never on mid-over word boundaries — so a
-        // callsign over like "SM5XY DE DD6DS K" is never mistaken for QRS.
-        // QRS/QRQ is STRIPPED from the over; remaining words (callsign, PSE, K)
-        // are still passed to the QSO engine so the QSO advances normally.
-        //
-        // Accepted patterns (any order, with or without surrounding words):
-        //   "QRS K"                  "QRQ K"
-        //   "PSE QRS K"              "PSE QRQ K"
-        //   "QRS PSE K"              "QRQ PSE K"
-        //   "SM5XY DE DD6DS QRS K"   "SM5XY DE DD6DS QRQ K"
-        //   "SM5XY DE DD6DS PSE QRS K"
-        let mut input_to_pass = if end_of_over {
-            user_tx_acc.trim().to_uppercase()
-        } else {
-            String::new()
-        };
+            // QSO engine tick — accumulate the full over across word boundaries.
+            // Only submit to the engine (and clear) when an end-of-over prosign
+            // is received — or Enter in text-adapter mode.
+            //
+            // End-of-over markers, covering both text-mode and CW-decoder output:
+            //   "K"   — letter K (.-),              decoded as 'K'
+            //   "BK"  — prosign <BK> (-...-.-),     decoded as ' ' (word-gap)
+            //   "AR"  — prosign <AR> (.-.-.),        decoded as '+' by CW decoder
+            //   "KN"  — prosign <KN> (-.--.) ,       decoded as '(' by CW decoder
+            //
+            // The CW decoder emits '+' for <AR> and '(' for <KN>, so we must
+            // accept those single-char forms in addition to the text-mode strings.
+            let end_of_over = text_end_of_over || if word_boundary {
+                let last_word = user_tx_acc.trim().to_uppercase();
+                match last_word.split_whitespace().last() {
+                    Some("K" | "BK" | "AR" | "KN") => true,
+                    // CW-decoder prosign equivalents: <AR> → '+', <KN> → '('
+                    Some("+" | "(") => true,
+                    _ => false,
+                }
+            } else {
+                false
+            };
 
-        if !input_to_pass.is_empty() {
-            let has_qrs = input_to_pass.split_whitespace().any(|w| w == "QRS");
-            let has_qrq = !has_qrs && input_to_pass.split_whitespace().any(|w| w == "QRQ");
-            if has_qrs || has_qrq {
-                let filter_word = if has_qrs { "QRS" } else { "QRQ" };
-                let new_wpm = if has_qrs {
-                    sim_wpm_shared.load(Ordering::Relaxed).saturating_sub(3).max(5)
-                } else {
-                    sim_wpm_shared.load(Ordering::Relaxed).saturating_add(3).min(50)
-                };
-                sim_wpm_shared.store(new_wpm, Ordering::Relaxed);
-                state.lock().unwrap().sim_wpm = new_wpm;
-                // Strip QRS/QRQ so the rest of the over reaches the engine
-                let stripped: Vec<&str> = input_to_pass.split_whitespace()
-                    .filter(|&w| w != filter_word).collect();
-                input_to_pass = stripped.join(" ");
+            // ── QRS / QRQ speed adjustment ─────────────────────────────────────────
+            // Only fires at end-of-over — never on mid-over word boundaries — so a
+            // callsign over like "SM5XY DE DD6DS K" is never mistaken for QRS.
+            // QRS/QRQ is STRIPPED from the over; remaining words (callsign, PSE, K)
+            // are still passed to the QSO engine so the QSO advances normally.
+            //
+            // Accepted patterns (any order, with or without surrounding words):
+            //   "QRS K"                  "QRQ K"
+            //   "PSE QRS K"              "PSE QRQ K"
+            //   "QRS PSE K"              "QRQ PSE K"
+            //   "SM5XY DE DD6DS QRS K"   "SM5XY DE DD6DS QRQ K"
+            //   "SM5XY DE DD6DS PSE QRS K"
+            let mut input_to_pass = if end_of_over {
+                user_tx_acc.trim().to_uppercase()
+            } else {
+                String::new()
+            };
 
-                // Only send an explicit QRS/QRQ ack when the over contained
-                // nothing else meaningful (standalone speed command).
-                // If the user also sent a callsign or exchange content the
-                // engine will reply at the new — already slower — speed,
-                // which serves as the implicit acknowledgment.
-                let filler = ["K", "BK", "AR", "KN", "+", "(", "PSE", "DE"];
-                let has_content = input_to_pass.split_whitespace()
-                    .any(|w| !filler.contains(&w));
-                if !has_content {
-                    let ack = if has_qrs { "QRS QRS" } else { "QRQ QRQ" };
+            if !input_to_pass.is_empty() {
+                let has_qrs = input_to_pass.split_whitespace().any(|w| w == "QRS");
+                let has_qrq = !has_qrs && input_to_pass.split_whitespace().any(|w| w == "QRQ");
+                if has_qrs || has_qrq {
+                    let filter_word = if has_qrs { "QRS" } else { "QRQ" };
+                    let new_wpm = if has_qrs {
+                        sim_wpm_shared.load(Ordering::Relaxed).saturating_sub(3).max(5)
+                    } else {
+                        sim_wpm_shared.load(Ordering::Relaxed).saturating_add(3).min(50)
+                    };
+                    sim_wpm_shared.store(new_wpm, Ordering::Relaxed);
+                    state.lock().unwrap().sim_wpm = new_wpm;
+                    // Strip QRS/QRQ so the rest of the over reaches the engine
+                    let stripped: Vec<&str> = input_to_pass.split_whitespace()
+                        .filter(|&w| w != filter_word).collect();
+                    input_to_pass = stripped.join(" ");
+
+                    // Only send an explicit QRS/QRQ ack when the over contained
+                    // nothing else meaningful (standalone speed command).
+                    // If the user also sent a callsign or exchange content the
+                    // engine will reply at the new — already slower — speed,
+                    // which serves as the implicit acknowledgment.
+                    let filler = ["K", "BK", "AR", "KN", "+", "(", "PSE", "DE"];
+                    let has_content = input_to_pass.split_whitespace()
+                        .any(|w| !filler.contains(&w));
+                    if !has_content {
+                        let ack = if has_qrs { "QRS QRS" } else { "QRQ QRQ" };
+                        {
+                            let mut st = state.lock().unwrap();
+                            if !cfg.no_decode {
+                                st.sim_log.push(ack.to_string());
+                                if st.sim_log.len() > 50 { st.sim_log.remove(0); }
+                            }
+                            st.status = sm.transmitting.into();
+                        }
+                        audio_busy.store(true, Ordering::Relaxed);
+                        let _ = tx_audio.send(ack.to_string());
+                    }
+                }
+            }
+
+            let event = engine.tick(&input_to_pass);
+            if end_of_over {
+                user_tx_acc.clear();
+            }
+
+            match event {
+                Some(QsoEvent::SimTransmit(text)) => {
                     {
                         let mut st = state.lock().unwrap();
                         if !cfg.no_decode {
-                            st.sim_log.push(ack.to_string());
+                            st.sim_log.push(text.clone());
                             if st.sim_log.len() > 50 { st.sim_log.remove(0); }
                         }
-                        st.status = sm.transmitting.into();
+                        st.status = if cfg.demo { sm.demo_transmitting.into() }
+                                    else        { sm.transmitting.into() };
                     }
+                    // Mark audio as busy BEFORE sending to the channel so that
+                    // WaitingForUser (which fires on the very next tick) sees the
+                    // correct state and knows to wait for the done signal.
                     audio_busy.store(true, Ordering::Relaxed);
-                    let _ = tx_audio.send(ack.to_string());
+                    let _ = tx_audio.send(text);
                 }
-            }
-        }
-
-        let event = engine.tick(&input_to_pass);
-        if end_of_over {
-            user_tx_acc.clear();
-        }
-
-        match event {
-            Some(QsoEvent::SimTransmit(text)) => {
-                {
-                    let mut st = state.lock().unwrap();
-                    if !cfg.no_decode {
-                        st.sim_log.push(text.clone());
-                        if st.sim_log.len() > 50 { st.sim_log.remove(0); }
-                    }
-                    st.status = if cfg.demo { sm.demo_transmitting.into() }
-                                else        { sm.transmitting.into() };
-                }
-                // Mark audio as busy BEFORE sending to the channel so that
-                // WaitingForUser (which fires on the very next tick) sees the
-                // correct state and knows to wait for the done signal.
-                audio_busy.store(true, Ordering::Relaxed);
-                let _ = tx_audio.send(text);
-            }
-            Some(QsoEvent::WaitingForUser) => {
-                if cfg.demo && !demo_complete {
-                    // Queue a response only once per waiting phase.
-                    if demo_queued_response.is_none() && demo_pending.is_none() {
-                        if let Some(resp) = engine.demo_response() {
-                            if audio_busy.load(Ordering::Relaxed) {
-                                // SIM is still transmitting — park the response
-                                // here until rx_audio_done fires (stage 1).
-                                demo_queued_response = Some(resp);
-                                let mut st = state.lock().unwrap();
-                                st.status = sm.demo_waiting.into();
-                            } else {
-                                // No audio in flight (e.g. ISendCq before SIM
-                                // has sent anything) — go straight to stage 2.
-                                let fire_at = std::time::Instant::now()
-                                    + Duration::from_millis(600);
-                                demo_pending = Some((fire_at, resp));
-                                let mut st = state.lock().unwrap();
-                                st.status = sm.demo_preparing.into();
+                Some(QsoEvent::WaitingForUser) => {
+                    if cfg.demo && !demo_complete {
+                        // Queue a response only once per waiting phase.
+                        if demo_queued_response.is_none() && demo_pending.is_none() {
+                            if let Some(resp) = engine.demo_response() {
+                                if audio_busy.load(Ordering::Relaxed) {
+                                    // SIM is still transmitting — park the response
+                                    // here until rx_audio_done fires (stage 1).
+                                    demo_queued_response = Some(resp);
+                                    let mut st = state.lock().unwrap();
+                                    st.status = sm.demo_waiting.into();
+                                } else {
+                                    // No audio in flight (e.g. ISendCq before SIM
+                                    // has sent anything) — go straight to stage 2.
+                                    let fire_at = std::time::Instant::now()
+                                        + Duration::from_millis(600);
+                                    demo_pending = Some((fire_at, resp));
+                                    let mut st = state.lock().unwrap();
+                                    st.status = sm.demo_preparing.into();
+                                }
                             }
                         }
-                    }
-                } else {
-                    let mut st = state.lock().unwrap();
-                    st.status = sm.listening.into();
-                }
-            }
-            Some(QsoEvent::QsoComplete) => {
-                if cfg.demo {
-                    // Keep the TUI alive — user reads the log then presses ESC
-                    demo_complete = true;
-                    let mut st = state.lock().unwrap();
-                    st.status = sm.demo_complete.into();
-                } else {
-                    {
+                    } else {
                         let mut st = state.lock().unwrap();
-                        st.status = sm.qso_complete.into();
+                        st.status = sm.listening.into();
                     }
-                    // Draw final state, then wait a moment
-                    #[cfg(feature = "tui")]
-                    {
-                        let st = state.lock().unwrap().clone();
-                        tui.draw(&st)?;
-                    }
-                    thread::sleep(Duration::from_secs(3));
-                    break 'main;
                 }
+                Some(QsoEvent::QsoComplete) => {
+                    if cfg.demo {
+                        // Keep the TUI alive — user reads the log then presses ESC
+                        demo_complete = true;
+                        let mut st = state.lock().unwrap();
+                        st.status = sm.demo_complete.into();
+                    } else {
+                        {
+                            let mut st = state.lock().unwrap();
+                            st.status = sm.qso_complete.into();
+                        }
+                        // Draw final state, then wait a moment
+                        #[cfg(feature = "tui")]
+                        {
+                            let st = state.lock().unwrap().clone();
+                            tui.draw(&st)?;
+                        }
+                        thread::sleep(Duration::from_secs(3));
+                        break 'main;
+                    }
+                }
+                Some(QsoEvent::RepeatLast) => {
+                    let mut st = state.lock().unwrap();
+                    st.status = sm.repeating.into();
+                }
+                None => {}
             }
-            Some(QsoEvent::RepeatLast) => {
-                let mut st = state.lock().unwrap();
-                st.status = sm.repeating.into();
-            }
-            None => {}
-        }
+        } // end QSO block (skipped in --keyer-only mode)
 
         // Draw TUI
         #[cfg(feature = "tui")]

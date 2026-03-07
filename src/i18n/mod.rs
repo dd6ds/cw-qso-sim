@@ -97,6 +97,7 @@ lang_map!(En, "English", [
     "cli.help.print_config"  => "Print the built-in default config.toml to stdout and exit",
     "cli.help.demo"          => "Demo mode: play a complete QSO automatically (no keyer needed), then wait for ESC to exit",
     "cli.help.no_decode"     => "Hide decoded CW text on screen — QSO still advances; useful for self-testing without a cheat-sheet",
+    "cli.help.keyer_only"    => "Keyer-only mode: display decoded keying with sidetone, no QSO simulation — ESC to quit",
     "cli.help.version"       => "Print version",
     "cli.help.help"          => "Print help",
 ]);
@@ -153,6 +154,7 @@ lang_map!(De, "Deutsch", [
     "cli.help.print_config"  => "Eingebaute Standard-config.toml auf stdout ausgeben und beenden",
     "cli.help.demo"          => "Demo-Modus: vollständiges QSO automatisch spielen (kein Keyer nötig), dann auf ESC warten",
     "cli.help.no_decode"     => "CW-Dekodierung ausblenden — QSO läuft weiter; nützlich zum Selbsttest ohne Spickzettel",
+    "cli.help.keyer_only"    => "Nur-Taster-Modus: dekodierte Tastereingabe mit Mithörton anzeigen, keine QSO-Simulation — ESC zum Beenden",
     "cli.help.version"       => "Version anzeigen",
     "cli.help.help"          => "Hilfe anzeigen",
 ]);
@@ -209,6 +211,7 @@ lang_map!(Fr, "Français", [
     "cli.help.print_config"  => "Afficher le config.toml intégré sur stdout et quitter",
     "cli.help.demo"          => "Mode démo : jouer un QSO complet automatiquement (pas de manipulateur requis), puis attendre ESC",
     "cli.help.no_decode"     => "Masquer le décodage CW à l'écran — le QSO avance quand même ; utile pour s'auto-évaluer sans aide",
+    "cli.help.keyer_only"    => "Mode manipulateur seul : affiche le décodage avec écoute de contrôle, sans simulation QSO — ESC pour quitter",
     "cli.help.version"       => "Afficher la version",
     "cli.help.help"          => "Afficher l'aide",
 ]);
@@ -265,6 +268,7 @@ lang_map!(It, "Italiano", [
     "cli.help.print_config"  => "Stampa il config.toml integrato su stdout ed esci",
     "cli.help.demo"          => "Modalità demo: esegui un QSO completo automaticamente (nessun manipolatore necessario), poi attendi ESC",
     "cli.help.no_decode"     => "Nasconde la decodifica CW a schermo — il QSO avanza normalmente; utile per auto-valutarsi senza supporto",
+    "cli.help.keyer_only"    => "Modalità solo tasto: mostra la decodifica con tono di ascolto, senza simulazione QSO — ESC per uscire",
     "cli.help.version"       => "Mostra la versione",
     "cli.help.help"          => "Mostra l'aiuto",
 ]);

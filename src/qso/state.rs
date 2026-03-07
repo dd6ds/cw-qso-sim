@@ -81,6 +81,7 @@ impl QsoEngine {
         };
 
         let script = QsoScript::build(
+            &mut rng,
             &cfg.mycall, &ex, cfg.qso_style, &my_rst, my_serial,
             &cfg.cwt_name, &cfg.cwt_nr, &cfg.my_dok,
             cfg.who_starts, &my_activator_ref,
@@ -366,7 +367,7 @@ impl QsoEngine {
                         format!("599 001 K")
                     }
                     QsoStyle::DarcCwContest => {
-                        format!("{sc} UR RST 599 DOK {} {} AR", self.my_dok, self.my_dok)
+                        format!("{sc} TU RST 599 DOK {} {} K", self.my_dok, self.my_dok)
                     }
                     QsoStyle::CqDx => {
                         format!("{sc} DE {} {my_rst} {my_rst} TU NAME OP QTH HOME BT QSL TU 73 SK",
