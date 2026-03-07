@@ -263,9 +263,27 @@ ATtiny85 GND         →  Paddle common ground
 7. *Sketch → Upload* — plug in the Digispark when Arduino IDE prompts you to
 
 
-
+---
 
 ### Raspberry Pi Pico 2 / RP2350 (Linux)
+
+1. Install [Arduino IDE](https://www.arduino.cc/en/software)
+
+2. Add Digispark board support:  
+   *File → Preferences → Additional Board Manager URLs*
+   https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+
+3. *Tools → Board → Boards Manager* -> Raspberry Pi Pico/RP2040/RPRP2350 -> Raspberry Pi Pico 2
+
+4. Install -> Adafruit TinyUSB
+
+5. Tools -> USB Stack -> TinyUSB
+
+6. Upload Method: UF2
+
+
+
+
 
 Flash `paddle_debug_pico2/paddle_debug_pico2.ino` (see `paddle_debug_pico2/INFO.md` for full setup).
 
