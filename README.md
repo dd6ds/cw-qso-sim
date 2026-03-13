@@ -746,7 +746,7 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 
 # Winkeyer
 
-cw-qso-sim-x86_64-pc-windows-gnu.exe --style mwc-contest --mycall DD6DS --adapter winkeyer --port COM7
+cw-qso-sim-x86_64-pc-windows-gnu.exe --style mwc-contest --mycall DD6DS --adapter winkeyer --port COM7 --tone 400 --user-wpm 20 --sim-wpm 25
 ```
 
 
