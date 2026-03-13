@@ -740,6 +740,15 @@ cw-qso-sim-x86_64-pc-windows-gnu.exe --adapter esp32 --port com4 --check-adapter
 ./cw-qso-sim --demo --style cota --mycall DD6DS
 ```
 
+-----
+
+```
+
+# Winkeyer
+
+cw-qso-sim-x86_64-pc-windows-gnu.exe --style mwc-contest --mycall DD6DS --adapter winkeyer --port COM7
+```
+
 
 
 
